@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Native build artifacts (libmpv + ffmpeg + libplayer) built via mpv-android buildscripts
+/app/src/main/jniLibs/
+/app/src/main/obj/
