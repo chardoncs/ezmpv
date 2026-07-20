@@ -1,13 +1,8 @@
 package dev.chardoncs.ezmpv.ui
 
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -20,16 +15,15 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import dev.chardoncs.ezmpv.ui.screens.AudioScreen
 import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
 import dev.chardoncs.ezmpv.ui.screens.VideoScreen
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EzmpvApp() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val currentDestination = TopLevelDestination.entries.firstOrNull { it.route == currentRoute }
 
     NavigationSuiteScaffold(
         navigationSuiteItems = {
@@ -49,21 +43,10 @@ fun EzmpvApp() {
             }
         },
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Text(currentDestination?.let { stringResource(it.labelRes) } ?: "")
-                    },
-                )
-            },
-        ) { innerPadding ->
-            EzmpvNavHost(
-                navController = navController,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = innerPadding,
-            )
-        }
+        EzmpvNavHost(
+            navController = navController,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -71,19 +54,18 @@ fun EzmpvApp() {
 private fun EzmpvNavHost(
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    contentPadding: PaddingValues = PaddingValues(),
 ) {
     NavHost(
         navController = navController,
         startDestination = TopLevelDestination.BROWSE.route,
-        modifier = modifier.padding(contentPadding),
+        modifier = modifier,
     ) {
         TopLevelDestination.entries.forEach { destination ->
             composable(route = destination.route) {
-                if (destination == TopLevelDestination.VIDEO) {
-                    VideoScreen()
-                } else {
-                    PlaceholderScreen(destination = destination)
+                when (destination) {
+                    TopLevelDestination.VIDEO -> VideoScreen()
+                    TopLevelDestination.AUDIO -> Modifier.AudioScreen()
+                    else -> PlaceholderScreen(destination = destination)
                 }
             }
         }

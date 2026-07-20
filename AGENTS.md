@@ -34,12 +34,20 @@ app/src/main/java/dev/chardoncs/ezmpv/
 ├── MainActivity.kt              # ComponentActivity, setContent { EzmpvTheme { EzmpvApp() } }
 ├── player/
 │   └── MpvSurface.kt            # rememberMpvController + MpvSurface (Compose AndroidView + SurfaceView)
+├── audio/
+│   ├── AudioController.kt       # MPVLib wrapper for audio-only playback (no surface); EventObserver → StateFlow
+│   ├── AudioState.kt            # AudioTrack, AudioUiState, playlistVisible logic
+│   ├── AudioViewModel.kt        # orchestrates controller + folderRepo + artCache + copyCache
+│   ├── FolderRepository.kt      # SAF tree grants + DocumentFile scan for audio/*
+│   ├── ArtCache.kt              # LruCache<Uri, Bitmap> + MediaMetadataRetriever extraction
+│   └── FileCopyCache.kt         # LRU on-disk copy cache (content:// → filesDir for mpv)
 └── ui/
     ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 top-level destinations)
     ├── TopLevelDestination.kt  # enum: BROWSE (start), VIDEO, AUDIO, MORE
     ├── screens/
-    │   ├── PlaceholderScreen.kt  # shared placeholder for Audio/Browse/More
-    │   └── VideoScreen.kt         # file picker + MpvSurface + LogObserver
+    │   ├── PlaceholderScreen.kt  # shared placeholder for Browse/More
+    │   ├── VideoScreen.kt         # file picker + MpvSurface + LogObserver
+    │   └── AudioScreen.kt         # BottomSheetScaffold playlist + album art fade + controls
     └── theme/
         ├── Color.kt             # light/dark color scheme tonal stops
         └── Theme.kt              # EzmpvTheme (dynamic color on Android 12+, fallback scheme below)
@@ -77,6 +85,25 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 
 An earlier attempt deferred `MPVLib.init()` to `surfaceCreated` so `wid` would be set before `mpv_initialize()`. That races and leaves mpv uninitialized if the surface isn't created first. The current code calls `create → init` in `rememberMpvController`'s `DisposableEffect` (matching upstream mpv-android's `BaseMPVView.initialize()`), and `attachSurface` is called separately. This works because the AAR's `attachSurface` uses `mpv_set_option` which mpv accepts after init for `wid` reconfiguration.
 
+## Audio screen — structure & lessons
+
+The Audio screen is foreground-only (audio stops on navigation away). It's structured so the `AudioController` can move into a `Service` later for background playback without rewriting the UI.
+
+- **`AudioController`** wraps a *separate* `MPVLib` instance from the Video screen — audio-only, no `SurfaceView`. Configures `vo=null`, `vid=no`, `aid=auto`, `idle=once`. Observes `time-pos` (Double), `duration` (Double), `pause` (Boolean), `eof-reached` (Boolean). On `eof-reached=true`, auto-advances `currentIndex` and invokes `onTrackEnd` (the ViewModel loads the next file).
+- **`AudioViewModel`** merges `controller.state` (playback) with its own state (playlist, art, folders, `playlistUserOverride`) into a single `uiState: StateFlow<AudioUiState>`. Don't try to keep two separate states in the UI — collect one.
+- **`FolderRepository`** uses SAF tree grants (`ACTION_OPEN_DOCUMENT_TREE` + `takePersistableUriPermission`) — no runtime permission needed, survives reboots. Lists audio via `DocumentFile.fromTreeUri(uri).listFiles()` filtered by `audio/*` MIME. SAF can't programmatically grant a "default `/Music`" tree — the UI prompts the user on first run.
+- **`FileCopyCache`** keeps an LRU of ~5 copied files in `filesDir/audio-cache/` because mpv can't open `content://` directly. Same gotcha as the Video screen's `copyContentUriToFile`, just cached.
+- **`ArtCache`** LRU of ~50 `Bitmap`s. `MediaMetadataRetriever.embeddedPicture` for embedded art; falls back to `cover.jpg`/`albumart.jpg`/`folder.jpg` in the track's parent folder.
+- **`AudioUiState.playlistVisible`** is a computed property: `userOverride ?: (currentArt == null)`. The "no album art → playlist pinned open by default" rule falls out of this naturally — don't add a separate field for it.
+
+### Playlist + album art fade behavior
+
+`AudioScreen` uses an inline `Column` (not a `BottomSheetScaffold`): album art header on top, controls row, then the playlist `LazyColumn` below taking the remaining space — the playlist is a sibling section, not an overlay. The playlist section is wrapped in `AnimatedVisibility(visible = playlistVisible, enter = expandVertically(), exit = shrinkVertically() + fadeOut())` so it expands/collapses inline.
+
+`AlbumArtHeader` is wrapped in `AnimatedVisibility(visible = currentArt != null && !playlistVisible, exit = fadeOut())` — the fade-out when the playlist opens. When `currentArt == null`, the header is invisible and `playlistVisible` auto-defaults to true, so the player controls move to the top and the playlist shows below — exactly the requested "no art → playlist always shows" behavior.
+
+Folder management (grant/revoke/refresh) lives in a three-dots `DropdownMenu` in the `TopAppBar` actions. `FolderRepository.scanAudio` recurses into subfolders (DFS over `DocumentFile.listFiles()`).
+
 ## Skills available in this repo
 
 `.agents/skills/` contains installable skills. The most relevant for this project:
@@ -90,15 +117,15 @@ Load a skill with the `skill` tool before doing work it covers.
 
 ## Roadmap (not yet implemented)
 
-What's done: app shell, M3 dynamic theme, four-section navigation, libmpv wired with a file-picking proof-of-concept in Video.
+What's done: app shell, M3 dynamic theme, four-section navigation, libmpv wired with a file-picking proof-of-concept in Video, Audio screen (foreground-only with playlist + album art fade + swipe-up sheet).
 
 What's next (each is a separate iteration — don't try to do everything at once):
 
-1. **Real player UI on Video screen** — play/pause, seek bar, time/duration, loading state. Observe `time-pos`, `duration`, `pause`, `eof-reached`, `core-idle` via `MPVLib.EventObserver`. Hide controls after inactivity. See material-3 skill for component patterns.
+1. **Real player UI on Video screen** — play/pause, seek bar, time/duration, loading state, hide controls after inactivity. (Audio already has these; Video needs the same treatment plus a full-screen surface.)
 2. **Browse screen** — file picker (SAF `ACTION_OPEN_DOCUMENT`), persistent recents, maybe a directory browser. A list-detail layout (Browse list → player detail) would benefit from the adaptive skill's Navigation 3 `ListDetailSceneStrategy`.
-3. **Audio screen** — background playback, MediaSession, notification controls (`androidx.media`). This is a large feature on its own.
+3. **Audio background playback (Part 3b)** — promote `AudioController` into an `AudioPlaybackService` + `MediaSession` (`androidx.media3.session`) + `Player` adapter (~30 methods) + notification controls + Android 14 `foregroundServiceType="mediaPlayback"` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission + `POST_NOTIFICATIONS` runtime permission. This is a large feature on its own.
 4. **More screen** — settings (mpv options: `hwdec`, `vo`, `gpu-api`, `profile=gpu-hq`, subtitle prefs, etc.), about, licenses.
-5. **Real permissions / SAF persistence** — for `ACTION_OPEN_DOCUMENT`, take a persistable URI permission so recents don't break across reboots.
+5. **Settings persistence** — store `selectedFolders`, mpv option choices, recents, etc. in `DataStore` (already a dep) so they survive reboots. Currently `FolderRepository` reads `persistedUriPermissions` which already persist, but other prefs don't.
 
 ## Things to avoid
 
@@ -106,4 +133,4 @@ What's next (each is a separate iteration — don't try to do everything at once
 - Don't clone mpv-android or wire `externalNativeBuild` — the AAR already provides the native libs. Adding a native build would only be needed if we ever fork the AAR or build libmpv ourselves (not currently planned).
 - Don't bundle large sample media. The earlier 30KB test clip was removed in favor of the file picker; keep it that way.
 - Don't hardcode `Color(0x…)` in composables — use `MaterialTheme.colorScheme` or the `ui/theme/Color.kt` constants.
-- Don't bump `minSdk` below 29 without reason (the AAR requires 26; we chose 29).
+- Don't bump `minSdk` below 29 without reason (the AAR requires 26; we chose 29). `FOREGROUND_SERVICE_MEDIA_PLAYBACK` etc. for Part 3b only require manifest entries, not an SDK bump.
