@@ -111,6 +111,5 @@ class AudioViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         controller.stop()
-        super.onCleared()
     }
 }
