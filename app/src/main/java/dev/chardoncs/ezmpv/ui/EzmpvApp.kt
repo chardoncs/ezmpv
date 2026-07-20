@@ -21,6 +21,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
+import dev.chardoncs.ezmpv.ui.screens.VideoScreen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,7 +80,11 @@ private fun EzmpvNavHost(
     ) {
         TopLevelDestination.entries.forEach { destination ->
             composable(route = destination.route) {
-                PlaceholderScreen(destination = destination)
+                if (destination == TopLevelDestination.VIDEO) {
+                    VideoScreen()
+                } else {
+                    PlaceholderScreen(destination = destination)
+                }
             }
         }
     }
