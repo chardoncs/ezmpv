@@ -14,6 +14,7 @@ android {
     defaultConfig {
         applicationId = "dev.chardoncs.ezmpv"
         minSdk = 29
+        //noinspection OldTargetApi
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -21,6 +22,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
+            //noinspection ChromeOsAbiSupport
             abiFilters += "arm64-v8a"
         }
     }
