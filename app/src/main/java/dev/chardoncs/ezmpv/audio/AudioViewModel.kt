@@ -83,6 +83,19 @@ class AudioViewModel(app: Application) : AndroidViewModel(app) {
             controller.loadFile(file.absolutePath, index)
             val art = artCache.getArt(track)
             _uiState.update { it.copy(currentArt = art, loading = false, error = null) }
+            // Lazily enrich metadata for this track and update the playlist entry.
+            val enriched = folderRepo.loadMetadata(track)
+            if (enriched != null) {
+                _uiState.update { ui ->
+                    val updated = ui.playlist.toMutableList()
+                    if (index in updated.indices) {
+                        updated[index] = enriched
+                        ui.copy(playlist = updated)
+                    } else {
+                        ui
+                    }
+                }
+            }
         }
     }
 

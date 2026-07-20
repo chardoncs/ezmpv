@@ -13,6 +13,7 @@ private const val TAG = "AudioController"
 class AudioController(private val context: Context) {
 
     var onTrackEnd: (() -> Unit)? = null
+    private var eofHandled = false
 
     private var mpv: MPVLib? = null
     private val observer = object : MPVLib.EventObserver {
@@ -25,7 +26,10 @@ class AudioController(private val context: Context) {
         override fun eventProperty(property: String, value: Boolean) {
             when (property) {
                 "pause" -> _state.update { it.copy(isPlaying = !value) }
-                "eof-reached" -> if (value) onEof()
+                "eof-reached" -> if (value && !eofHandled) {
+                    eofHandled = true
+                    onEof()
+                }
             }
         }
         override fun eventProperty(property: String, value: Double) {
@@ -61,7 +65,7 @@ class AudioController(private val context: Context) {
             m.setOptionString("vo", "null")
             m.setOptionString("vid", "no")
             m.setOptionString("aid", "auto")
-            m.setOptionString("idle", "once")
+            m.setOptionString("idle", "yes")
             m.init()
             m.addObserver(observer)
             m.observeProperty("time-pos", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
@@ -82,11 +86,13 @@ class AudioController(private val context: Context) {
             runCatching { m.destroy() }
         }
         mpv = null
+        eofHandled = false
         _state.update { it.copy(isPlaying = false, positionMs = 0, currentIndex = -1) }
     }
 
     fun loadFile(path: String, index: Int) {
         val m = mpv ?: return
+        eofHandled = false
         _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0) }
         m.command(arrayOf("loadfile", path, "replace"))
     }

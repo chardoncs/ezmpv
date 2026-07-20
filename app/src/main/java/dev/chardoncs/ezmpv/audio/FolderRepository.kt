@@ -49,33 +49,37 @@ class FolderRepository(private val context: Context) {
         dir.listFiles().forEach { doc ->
             when {
                 doc.isDirectory -> collectAudio(doc, out)
-                doc.isFile && doc.type?.startsWith("audio/") == true ->
-                    docToTrack(doc.uri, doc.type)?.let(out::add)
+                doc.isFile && doc.type?.startsWith("audio/") == true -> {
+                    val name = doc.name ?: doc.uri.lastPathSegment ?: "Unknown"
+                    out.add(
+                        AudioTrack(
+                            sourceUri = doc.uri,
+                            title = name.substringBeforeLast('.'),
+                            artist = null,
+                            album = null,
+                            durationMs = 0L,
+                            sizeBytes = doc.length(),
+                            mimeType = doc.type,
+                        )
+                    )
+                }
             }
         }
     }
 
-    private fun docToTrack(uri: Uri, mimeType: String?): AudioTrack? {
+    suspend fun loadMetadata(track: AudioTrack): AudioTrack? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(context, uri)
+        try {
+            retriever.setDataSource(context, track.sourceUri)
             val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                ?: uri.lastPathSegment ?: "Unknown"
+                ?: track.title
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
-            AudioTrack(
-                sourceUri = uri,
-                title = title,
-                artist = artist,
-                album = album,
-                durationMs = durationMs,
-                sizeBytes = 0L,
-                mimeType = mimeType,
-            )
+            track.copy(title = title, artist = artist, album = album, durationMs = durationMs)
         } catch (t: Throwable) {
-            Log.w(TAG, "metadata extraction failed for $uri", t)
+            Log.w(TAG, "metadata extraction failed for ${track.sourceUri}", t)
             null
         } finally {
             runCatching { retriever.release() }
