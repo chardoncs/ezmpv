@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "skills": {
+    "adaptive": {
+      "source": "android/skills",
+      "sourceType": "github",
+      "skillPath": "jetpack-compose/adaptive/SKILL.md",
+      "computedHash": "8e13aa86d56a67b2ed111958af7b93fb891ad39f5b5dabb6914c8125edfdb510"
+    },
+    "android-cli": {
+      "source": "android/skills",
+      "sourceType": "github",
+      "skillPath": "devtools/android-cli/SKILL.md",
+      "computedHash": "eb80a09aa81e8ef4d32ec7cf4240bb07c1242326f4d664a3e354855da81617de"
+    },
+    "camerax": {
+      "source": "android/skills",
+      "sourceType": "github",
+      "skillPath": "camera/camerax/SKILL.md",
+      "computedHash": "f13a53e4b4e398b787fd4099a00bfbba469125803a200fd2a6ad79bc32e54672"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/find-skills/SKILL.md",
+      "computedHash": "781bd6d3f9b19f8c9af6b53d8d0e4876d0183841b565db34ca7092ffa412d111"
+    },
+    "material-3": {
+      "source": "hamen/material-3-skill",
+      "sourceType": "github",
+      "skillPath": "skills/material-3/SKILL.md",
+      "computedHash": "72d56347fae33c9b1763e16d0bffb781da382aa3be316b9252dcd35fd050c6bc"
+    },
+    "migrate-xml-views-to-jetpack-compose": {
+      "source": "android/skills",
+      "sourceType": "github",
+      "skillPath": "jetpack-compose/migration/migrate-xml-views-to-jetpack-compose/SKILL.md",
+      "computedHash": "ee551b71573665d7c669ccb7ba7495bb766a01c6b806e37a83b2e6fae1169671"
+    },
+    "navigation-3": {
+      "source": "android/skills",
+      "sourceType": "github",
+      "skillPath": "navigation/navigation-3/SKILL.md",
+      "computedHash": "986643c50a653c47213f1a184cda85f2e821738ce108a90fa8ed7278c087ac76"
+    },
+    "styles": {
+      "source": "android/skills",
+      "sourceType": "github",
+      "skillPath": "jetpack-compose/theming/styles/SKILL.md",
+      "computedHash": "8392fa00f0b760f4ce4618d16bc5b5a9b8df9da75ae4ea45d8357ccff8a393c1"
+    }
+  }
+}
