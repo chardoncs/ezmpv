@@ -11,6 +11,7 @@ import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.core.net.toUri
+import dev.chardoncs.ezmpv.player.MediaItem
 
 private const val TAG = "ArtCache"
 private val COVER_NAMES = listOf("cover.jpg", "cover.png", "albumart.jpg", "albumart.png", "folder.jpg")
@@ -18,10 +19,10 @@ private val COVER_NAMES = listOf("cover.jpg", "cover.png", "albumart.jpg", "albu
 class ArtCache(private val context: Context, maxSize: Int = 50) {
     private val cache = LruCache<String, Bitmap>(maxSize)
 
-    suspend fun getArt(track: AudioTrack): Bitmap? = withContext(Dispatchers.IO) {
-        val key = track.sourceUri.toString()
+    suspend fun getArt(item: MediaItem): Bitmap? = withContext(Dispatchers.IO) {
+        val key = item.sourceUri.toString()
         cache.get(key)?.let { return@withContext it }
-        val bmp = extractEmbedded(track.sourceUri) ?: extractFolderCover(track.sourceUri)
+        val bmp = extractEmbedded(item.sourceUri) ?: extractFolderCover(item.sourceUri)
         if (bmp != null) cache.put(key, bmp)
         bmp
     }

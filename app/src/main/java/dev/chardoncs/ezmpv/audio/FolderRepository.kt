@@ -5,12 +5,15 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
+import dev.chardoncs.ezmpv.player.MediaItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 private const val TAG = "FolderRepository"
 
 class FolderRepository(private val context: Context) {
+
+    private val metadataCache = MetadataCache(context)
 
     fun grantedFolders(): List<Uri> =
         context.contentResolver.persistedUriPermissions
@@ -37,29 +40,39 @@ class FolderRepository(private val context: Context) {
         }.onFailure { Log.e(TAG, "revokeFolder failed", it) }
     }
 
-    suspend fun scanAudio(folderUri: Uri): List<AudioTrack> = withContext(Dispatchers.IO) {
+    suspend fun scanMedia(folderUri: Uri): List<MediaItem> = withContext(Dispatchers.IO) {
         val tree = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
         if (!tree.isDirectory) return@withContext emptyList()
-        val out = mutableListOf<AudioTrack>()
-        collectAudio(tree, out)
-        out.sortedBy { it.title.lowercase() }
+        val out = mutableListOf<MediaItem>()
+        collectMedia(tree, out)
+        out.map { enrich(it) }.sortedBy { it.title.lowercase() }
     }
 
-    private fun collectAudio(dir: DocumentFile, out: MutableList<AudioTrack>) {
+    private suspend fun enrich(item: MediaItem): MediaItem {
+        metadataCache.get(item)?.let { return it }
+        val enriched = loadMetadata(item) ?: item
+        metadataCache.put(enriched)
+        return enriched
+    }
+
+    private fun collectMedia(dir: DocumentFile, out: MutableList<MediaItem>) {
         dir.listFiles().forEach { doc ->
             when {
-                doc.isDirectory -> collectAudio(doc, out)
-                doc.isFile && doc.type?.startsWith("audio/") == true -> {
+                doc.isDirectory -> collectMedia(doc, out)
+                doc.isFile -> {
+                    val mime = doc.type
+                    val isVideo = mime?.startsWith("video/") == true
+                    val isAudio = mime?.startsWith("audio/") == true
+                    if (!isVideo && !isAudio) return@forEach
                     val name = doc.name ?: doc.uri.lastPathSegment ?: "Unknown"
                     out.add(
-                        AudioTrack(
+                        MediaItem(
                             sourceUri = doc.uri,
                             title = name.substringBeforeLast('.'),
-                            artist = null,
-                            album = null,
                             durationMs = 0L,
                             sizeBytes = doc.length(),
-                            mimeType = doc.type,
+                            mimeType = mime,
+                            isVideo = isVideo,
                         )
                     )
                 }
@@ -67,19 +80,29 @@ class FolderRepository(private val context: Context) {
         }
     }
 
-    suspend fun loadMetadata(track: AudioTrack): AudioTrack? = withContext(Dispatchers.IO) {
+    suspend fun loadMetadata(item: MediaItem): MediaItem? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(context, track.sourceUri)
+            retriever.setDataSource(context, item.sourceUri)
             val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
-                ?: track.title
+                ?: item.title
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                 ?.toLongOrNull() ?: 0L
-            track.copy(title = title, artist = artist, album = album, durationMs = durationMs)
+            val year = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR)
+                ?.toIntOrNull()
+                ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
+                    ?.take(4)?.toIntOrNull()
+            item.copy(
+                title = title,
+                artist = artist,
+                album = album,
+                durationMs = durationMs,
+                year = year,
+            )
         } catch (t: Throwable) {
-            Log.w(TAG, "metadata extraction failed for ${track.sourceUri}", t)
+            Log.w(TAG, "metadata extraction failed for ${item.sourceUri}", t)
             null
         } finally {
             runCatching { retriever.release() }

@@ -3,6 +3,7 @@ package dev.chardoncs.ezmpv.audio
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import dev.chardoncs.ezmpv.player.MediaItem
 import java.io.File
 import java.security.MessageDigest
 
@@ -13,31 +14,30 @@ class FileCopyCache(
     private val maxSize: Int = 5,
 ) {
     private val order = ArrayDeque<String>()
-    private val cacheDir = File(context.filesDir, "audio-cache").apply { mkdirs() }
+    private val cacheDir = File(context.filesDir, "media-cache").apply { mkdirs() }
 
-    fun getPlayableFile(track: AudioTrack): File? {
-        val key = hashKey(track.sourceUri)
-        val ext = guessExtension(track)
+    fun getPlayableFile(item: MediaItem): File? {
+        val key = hashKey(item.sourceUri)
+        val ext = guessExtension(item)
         val cached = File(cacheDir, "$key.$ext")
         if (cached.exists() && cached.length() > 0) {
-            // Move to most-recently-used.
             order.remove(key)
             order.addFirst(key)
             return cached
         }
         return try {
-            context.contentResolver.openInputStream(track.sourceUri)?.use { input ->
+            context.contentResolver.openInputStream(item.sourceUri)?.use { input ->
                 cached.outputStream().use { output -> input.copyTo(output) }
             } ?: return null
             order.remove(key)
             order.addFirst(key)
             while (order.size > maxSize) {
                 val evicted = order.removeLast()
-                File(cacheDir, "$evicted.*").listFiles()?.forEach { it.delete() }
+                cacheDir.listFiles()?.filter { it.name.startsWith("$evicted.") }?.forEach { it.delete() }
             }
             cached
         } catch (t: Throwable) {
-            Log.e(TAG, "copy failed for ${track.sourceUri}", t)
+            Log.e(TAG, "copy failed for ${item.sourceUri}", t)
             null
         }
     }
@@ -47,9 +47,8 @@ class FileCopyCache(
         return md.digest(uri.toString().toByteArray()).joinToString("") { "%02x".format(it) }
     }
 
-    private fun guessExtension(track: AudioTrack): String {
-        // Prefer the URI's filename extension (works for most SAF URIs).
-        val seg = track.sourceUri.lastPathSegment
+    private fun guessExtension(item: MediaItem): String {
+        val seg = item.sourceUri.lastPathSegment
         if (seg != null) {
             val dot = seg.lastIndexOf('.')
             if (dot >= 0) {
@@ -57,8 +56,7 @@ class FileCopyCache(
                 if (ext.isNotEmpty() && ext.length <= 6) return ext
             }
         }
-        // Fall back to the MIME subtype (e.g. "audio/mpeg" -> "mpeg", "audio/mp4" -> "mp4").
-        track.mimeType?.substringAfter('/')?.lowercase()?.let { return it }
+        item.mimeType?.substringAfter('/')?.lowercase()?.let { return it }
         return "bin"
     }
 }

@@ -33,12 +33,13 @@ app/src/main/java/dev/chardoncs/ezmpv/
 ├── EzmpvApplication.kt          # Application subclass (empty for now; room for DI later)
 ├── MainActivity.kt              # ComponentActivity, setContent { EzmpvTheme { EzmpvApp() } }
 ├── player/
-│   └── MpvSurface.kt            # rememberMpvController + MpvSurface (Compose AndroidView + SurfaceView)
+│   ├── Player.kt                # unified MPVLib wrapper (audio + video modes); EventObserver → StateFlow<PlayerState>
+│   ├── PlayerState.kt           # PlayerState (superset of old AudioUiState), playlistVisible logic
+│   ├── MediaItem.kt             # generalized MediaItem (audio + video; has isVideo, year)
+│   ├── PlayerViewModel.kt       # orchestrates Player + folderRepo + artCache + copyCache
+│   └── MpvSurface.kt            # rememberPlayer + MpvSurface (Compose AndroidView + SurfaceView)
 ├── audio/
-│   ├── AudioController.kt       # MPVLib wrapper for audio-only playback (no surface); EventObserver → StateFlow
-│   ├── AudioState.kt            # AudioTrack, AudioUiState, playlistVisible logic
-│   ├── AudioViewModel.kt        # orchestrates controller + folderRepo + artCache + copyCache
-│   ├── FolderRepository.kt      # SAF tree grants + DocumentFile scan for audio/*
+│   ├── FolderRepository.kt      # SAF tree grants + DocumentFile scan for audio/* + video/* → MediaItem
 │   ├── ArtCache.kt              # LruCache<Uri, Bitmap> + MediaMetadataRetriever extraction
 │   └── FileCopyCache.kt         # LRU on-disk copy cache (content:// → filesDir for mpv)
 └── ui/
@@ -46,8 +47,8 @@ app/src/main/java/dev/chardoncs/ezmpv/
     ├── TopLevelDestination.kt  # enum: BROWSE (start), VIDEO, AUDIO, MORE
     ├── screens/
     │   ├── PlaceholderScreen.kt  # shared placeholder for Browse/More
-    │   ├── VideoScreen.kt         # file picker + MpvSurface + LogObserver
-    │   └── AudioScreen.kt         # BottomSheetScaffold playlist + album art fade + controls
+    │   ├── VideoScreen.kt         # file picker + MpvSurface (uses rememberPlayer)
+    │   └── AudioScreen.kt         # inline Column playlist + album art fade + controls (uses PlayerViewModel)
     └── theme/
         ├── Color.kt             # light/dark color scheme tonal stops
         └── Theme.kt              # EzmpvTheme (dynamic color on Android 12+, fallback scheme below)
@@ -73,9 +74,9 @@ The `dev.jdtech.mpv:libmpv` AAR (v1.0.0) is an instance-based MIT-licensed fork 
 
 ### The surface-attach race (gotcha — read this before touching `MpvSurface.kt`)
 
-`SurfaceHolder.Callback.surfaceCreated` can fire **before** the `DisposableEffect` in `rememberMpvController` has created `MPVLib`, so `controller.mpv` is still `null` at that moment and `attachSurface` cannot be called. `surfaceCreated` does NOT fire again on its own, so mpv ends up initialized with no surface attached → `vo/gpu/android: Missing surface pointer` crash on playback.
+`SurfaceHolder.Callback.surfaceCreated` can fire **before** the `DisposableEffect` in `rememberPlayer` has created `MPVLib`, so `player.isCreated` is still `false` at that moment and `attachSurface` cannot be called. `surfaceCreated` does NOT fire again on its own, so mpv ends up initialized with no surface attached → `vo/gpu/android: Missing surface pointer` crash on playback.
 
-**Fix in place:** `MpvSurface` tracks the current `SurfaceHolder` in a `mutableStateOf`, and a `LaunchedEffect(controller.mpv, currentHolder)` attaches the surface when **both** become non-null — covering both "surface first, mpv later" and "mpv first, surface later" orderings. Do not remove this `LaunchedEffect` thinking it's redundant; it's load-bearing.
+**Fix in place:** `MpvSurface` tracks the current `SurfaceHolder` in a `mutableStateOf`, and a `LaunchedEffect(player.isCreated, currentHolder)` attaches the surface when **both** become non-null — covering both "surface first, mpv later" and "mpv first, surface later" orderings. Do not remove this `LaunchedEffect` thinking it's redundant; it's load-bearing.
 
 ### mpv can't open Android `content://` or `android.resource://` URIs
 
@@ -83,18 +84,22 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 
 ### Don't defer `mpv.init()` until after `surfaceCreated`
 
-An earlier attempt deferred `MPVLib.init()` to `surfaceCreated` so `wid` would be set before `mpv_initialize()`. That races and leaves mpv uninitialized if the surface isn't created first. The current code calls `create → init` in `rememberMpvController`'s `DisposableEffect` (matching upstream mpv-android's `BaseMPVView.initialize()`), and `attachSurface` is called separately. This works because the AAR's `attachSurface` uses `mpv_set_option` which mpv accepts after init for `wid` reconfiguration.
+An earlier attempt deferred `MPVLib.init()` to `surfaceCreated` so `wid` would be set before `mpv_initialize()`. That races and leaves mpv uninitialized if the surface isn't created first. The current code calls `create → init` in `rememberPlayer`'s `DisposableEffect` (matching upstream mpv-android's `BaseMPVView.initialize()`), and `attachSurface` is called separately. This works because the AAR's `attachSurface` uses `mpv_set_option` which mpv accepts after init for `wid` reconfiguration.
 
-## Audio screen — structure & lessons
+### Audio-only mode for video (runtime toggle)
 
-The Audio screen is foreground-only (audio stops on navigation away). It's structured so the `AudioController` can move into a `Service` later for background playback without rewriting the UI.
+`Player` is constructed with an `audioOnly` flag (audio screen passes `true`, video screen passes `false`). `Player.setAudioOnly(Boolean)` toggles at runtime by flipping `vid`/`vo`/`force-window` and attaching/detaching the surface — this backs the "audio-only mode for video" feature without recreating the `MPVLib` instance. Don't call `attachSurface` while `audioOnly=true`; `Player` already guards against it.
 
-- **`AudioController`** wraps a *separate* `MPVLib` instance from the Video screen — audio-only, no `SurfaceView`. Configures `vo=null`, `vid=no`, `aid=auto`, `idle=once`. Observes `time-pos` (Double), `duration` (Double), `pause` (Boolean), `eof-reached` (Boolean). On `eof-reached=true`, auto-advances `currentIndex` and invokes `onTrackEnd` (the ViewModel loads the next file).
-- **`AudioViewModel`** merges `controller.state` (playback) with its own state (playlist, art, folders, `playlistUserOverride`) into a single `uiState: StateFlow<AudioUiState>`. Don't try to keep two separate states in the UI — collect one.
-- **`FolderRepository`** uses SAF tree grants (`ACTION_OPEN_DOCUMENT_TREE` + `takePersistableUriPermission`) — no runtime permission needed, survives reboots. Lists audio via `DocumentFile.fromTreeUri(uri).listFiles()` filtered by `audio/*` MIME. SAF can't programmatically grant a "default `/Music`" tree — the UI prompts the user on first run.
-- **`FileCopyCache`** keeps an LRU of ~5 copied files in `filesDir/audio-cache/` because mpv can't open `content://` directly. Same gotcha as the Video screen's `copyContentUriToFile`, just cached.
-- **`ArtCache`** LRU of ~50 `Bitmap`s. `MediaMetadataRetriever.embeddedPicture` for embedded art; falls back to `cover.jpg`/`albumart.jpg`/`folder.jpg` in the track's parent folder.
-- **`AudioUiState.playlistVisible`** is a computed property: `userOverride ?: (currentArt == null)`. The "no album art → playlist pinned open by default" rule falls out of this naturally — don't add a separate field for it.
+## Player + Audio/Video screens — structure & lessons
+
+There is a single `Player` driving both audio and video (the old `AudioController` and `VideoScreen`'s `rememberMpvController` were merged into it). The Audio screen is foreground-only (audio stops on navigation away). The structure is designed so `Player` can move into a `Service` later for background playback without rewriting the UI.
+
+- **`Player`** wraps a single `MPVLib` instance per screen. Configures `vo`/`vid`/`force-window` based on the `audioOnly` flag. Observes `time-pos` (Double), `duration` (Double), `pause` (Boolean), `eof-reached` (Boolean). On `eof-reached=true`, auto-advances `currentIndex` and invokes `onTrackEnd` (the ViewModel loads the next file).
+- **`PlayerViewModel`** merges `player.state` (playback) with its own state (playlist, art, folders, `playlistUserOverride`) into a single `uiState: StateFlow<PlayerState>`. Don't try to keep two separate states in the UI — collect one.
+- **`FolderRepository`** uses SAF tree grants (`ACTION_OPEN_DOCUMENT_TREE` + `takePersistableUriPermission`) — no runtime permission needed, survives reboots. Lists media via `DocumentFile.fromTreeUri(uri).listFiles()` filtered by `audio/*` and `video/*` MIME (returns `MediaItem`). SAF can't programmatically grant a "default `/Music`" tree — the UI prompts the user on first run.
+- **`FileCopyCache`** keeps an LRU of ~5 copied files in `filesDir/media-cache/` because mpv can't open `content://` directly. Same gotcha as the Video screen's `copyContentUriToFile`, just cached.
+- **`ArtCache`** LRU of ~50 `Bitmap`s. `MediaMetadataRetriever.embeddedPicture` for embedded art; falls back to `cover.jpg`/`albumart.jpg`/`folder.jpg` in the track's parent folder. Only fetched for audio items (video items get no art in the current UI).
+- **`PlayerState.playlistVisible`** is a computed property: `userOverride ?: (currentArt == null)`. The "no album art → playlist pinned open by default" rule falls out of this naturally — don't add a separate field for it.
 
 ### Playlist + album art fade behavior
 
@@ -102,7 +107,7 @@ The Audio screen is foreground-only (audio stops on navigation away). It's struc
 
 `AlbumArtHeader` is wrapped in `AnimatedVisibility(visible = currentArt != null && !playlistVisible, exit = fadeOut())` — the fade-out when the playlist opens. When `currentArt == null`, the header is invisible and `playlistVisible` auto-defaults to true, so the player controls move to the top and the playlist shows below — exactly the requested "no art → playlist always shows" behavior.
 
-Folder management (grant/revoke/refresh) lives in a three-dots `DropdownMenu` in the `TopAppBar` actions. `FolderRepository.scanAudio` recurses into subfolders (DFS over `DocumentFile.listFiles()`).
+Folder management (grant/revoke/refresh) lives in a three-dots `DropdownMenu` in the `TopAppBar` actions. `FolderRepository.scanMedia` recurses into subfolders (DFS over `DocumentFile.listFiles()`).
 
 ## Skills available in this repo
 
@@ -117,15 +122,16 @@ Load a skill with the `skill` tool before doing work it covers.
 
 ## Roadmap (not yet implemented)
 
-What's done: app shell, M3 dynamic theme, four-section navigation, libmpv wired with a file-picking proof-of-concept in Video, Audio screen (foreground-only with playlist + album art fade + swipe-up sheet).
+What's done: app shell, M3 dynamic theme, four-section navigation, libmpv wired with a file-picking proof-of-concept in Video, Audio screen (foreground-only with playlist + album art fade + swipe-up sheet), unified `Player` core driving both audio and video (Iteration 1 of the player rework).
 
 What's next (each is a separate iteration — don't try to do everything at once):
 
-1. **Real player UI on Video screen** — play/pause, seek bar, time/duration, loading state, hide controls after inactivity. (Audio already has these; Video needs the same treatment plus a full-screen surface.)
-2. **Browse screen** — file picker (SAF `ACTION_OPEN_DOCUMENT`), persistent recents, maybe a directory browser. A list-detail layout (Browse list → player detail) would benefit from the adaptive skill's Navigation 3 `ListDetailSceneStrategy`.
-3. **Audio background playback (Part 3b)** — promote `AudioController` into an `AudioPlaybackService` + `MediaSession` (`androidx.media3.session`) + `Player` adapter (~30 methods) + notification controls + Android 14 `foregroundServiceType="mediaPlayback"` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission + `POST_NOTIFICATIONS` runtime permission. This is a large feature on its own.
-4. **More screen** — settings (mpv options: `hwdec`, `vo`, `gpu-api`, `profile=gpu-hq`, subtitle prefs, etc.), about, licenses.
-5. **Settings persistence** — store `selectedFolders`, mpv option choices, recents, etc. in `DataStore` (already a dep) so they survive reboots. Currently `FolderRepository` reads `persistedUriPermissions` which already persist, but other prefs don't.
+1. **Background playback (Iteration 2)** — promote `Player` into a `PlayerService` + `MediaSession` (`androidx.media3.session`) + `Player` adapter (~30 methods) + notification controls + Android 14 `foregroundServiceType="mediaPlayback"` + `FOREGROUND_SERVICE_MEDIA_PLAYBACK` permission + `POST_NOTIFICATIONS` runtime permission + PiP for video. This is a large feature on its own.
+2. **Mini player + Now Playing destination (Iteration 3)** — single reparented `SurfaceView` shared between mini and full Now Playing; mini player pinned above the nav bar/rail; "Now Playing" as a non-tab NavHost destination.
+3. **Now Playing UI rework (Iteration 4)** — album art placeholder when no art, playlist replaces album art (overlay on same region, not below controls), bottom-centered controls (play/pause largest, prev/next second, aux smaller), audio-only toggle for video (global, persisted).
+4. **Library screen (Iteration 5)** — single Library tab replacing Video + Audio tabs, media-type filter (All/Video/Audio), group-by (Location/Artist/Album/Year), list/grid toggle, scan-time metadata enrichment + DataStore cache. Browse stays (file picker).
+5. **More screen** — settings (mpv options: `hwdec`, `vo`, `gpu-api`, `profile=gpu-hq`, subtitle prefs, etc.), about, licenses.
+6. **Settings persistence** — store `selectedFolders`, mpv option choices, recents, `audioOnly`, view-mode/group-by/filter, enriched metadata cache, etc. in `DataStore` (already a dep) so they survive reboots. Currently `FolderRepository` reads `persistedUriPermissions` which already persist, but other prefs don't.
 
 ## Things to avoid
 
