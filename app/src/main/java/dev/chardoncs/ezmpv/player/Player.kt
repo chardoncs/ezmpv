@@ -100,6 +100,7 @@ class Player(private val context: Context) {
         eofHandled = false
         _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0) }
         m.command(arrayOf("loadfile", path, "replace"))
+        m.setPropertyBoolean("pause", false)
     }
 
     fun setPlaylist(items: List<MediaItem>) {
