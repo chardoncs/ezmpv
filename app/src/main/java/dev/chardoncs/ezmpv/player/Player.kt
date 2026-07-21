@@ -155,6 +155,16 @@ class Player(private val context: Context) {
     }
 
     fun detachSurface() {
+        val s = surface
+        if (s != null) detachSurface(s) else doDetachSurface()
+    }
+
+    fun detachSurface(s: Surface) {
+        if (s !== surface) return
+        doDetachSurface()
+    }
+
+    private fun doDetachSurface() {
         val m = mpv ?: return
         if (hasSurfaceAttached) {
             m.setPropertyString("vo", "null")

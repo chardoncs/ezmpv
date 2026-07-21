@@ -60,7 +60,12 @@ fun MiniPlayerBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val art = state.currentArt
-                if (art != null) {
+                if (state.hasVideo && !state.audioOnly) {
+                    dev.chardoncs.ezmpv.player.MpvSurface(
+                        player = controller.player,
+                        modifier = Modifier.size(44.dp),
+                    )
+                } else if (art != null) {
                     Image(
                         bitmap = art.asImageBitmap(),
                         contentDescription = "Album art",
@@ -95,8 +100,8 @@ fun MiniPlayerBar(
                     )
                 }
                 IconButton(onClick = controller::togglePlayPause) {
-                    Icon(
-                        if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
+                        isPlaying = state.isPlaying,
                         contentDescription = if (state.isPlaying) "Pause" else "Play",
                     )
                 }

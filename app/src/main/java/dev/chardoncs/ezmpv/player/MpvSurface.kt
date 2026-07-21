@@ -54,7 +54,7 @@ fun MpvSurface(
                     override fun surfaceDestroyed(holder: SurfaceHolder) {
                         Log.d(TAG, "surfaceDestroyed")
                         currentHolder = null
-                        player.detachSurface()
+                        player.detachSurface(holder.surface)
                     }
                 })
             }

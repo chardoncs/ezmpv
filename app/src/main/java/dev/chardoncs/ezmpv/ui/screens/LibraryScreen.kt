@@ -308,8 +308,8 @@ private fun TrackListRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         IconButton(onClick = onClick) {
-            Icon(
-                if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+            dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
+                isPlaying = isPlaying,
                 contentDescription = "Play ${track.title}",
             )
         }

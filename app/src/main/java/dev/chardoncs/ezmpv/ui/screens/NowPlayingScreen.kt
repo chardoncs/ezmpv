@@ -199,10 +199,8 @@ private fun PlaylistOverlay(
                     )
                 }
                 IconButton(onClick = { onSelect(index) }) {
-                    Icon(
-                        if (index == state.currentIndex && state.isPlaying)
-                            Icons.Filled.Pause
-                        else Icons.Filled.PlayArrow,
+                    dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
+                        isPlaying = index == state.currentIndex && state.isPlaying,
                         contentDescription = "Play ${item.title}",
                     )
                 }
@@ -299,10 +297,12 @@ private fun NowPlayingControls(
                 modifier = Modifier.size(80.dp),
                 shape = IconButtonDefaults.filledShape,
             ) {
-                Icon(
-                    if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
+                    isPlaying = state.isPlaying,
                     contentDescription = if (state.isPlaying) "Pause" else "Play",
-                    modifier = Modifier.size(44.dp),
+                    modifier = Modifier.size(56.dp),
+                    showRing = false,
+                    glyphScaleFactor = 1.7f,
                 )
             }
             IconButton(
