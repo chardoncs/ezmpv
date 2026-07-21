@@ -49,7 +49,7 @@ app/src/main/java/dev/chardoncs/ezmpv/
 │   ├── MetadataCache.kt         # DataStore-backed JSON cache of enriched metadata (survives reboots)
 │   └── LibraryPreferences.kt    # DataStore-backed ViewMode + GroupBy prefs
 └── ui/
-    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 tabs + now_playing) + MiniPlayerBar
+    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 tabs) + MiniPlayerBar + player overlay
     ├── TopLevelDestination.kt  # enum: BROWSE (start), VIDEO, AUDIO, MORE
     ├── components/
     │   └── AnimatedPlayPauseIcon.kt  # VLC-style path-morph play↔pause (Canvas, no XML drawables)
@@ -59,13 +59,13 @@ app/src/main/java/dev/chardoncs/ezmpv/
     │   ├── AudioScreen.kt       # thin wrapper → LibraryScreen(AUDIO)
     │   ├── VideoScreen.kt       # thin wrapper → LibraryScreen(VIDEO, showPickFile)
     │   ├── MiniPlayerBar.kt     # mini player above nav; live video preview when hasVideo && !audioOnly
-    │   └── NowPlayingScreen.kt  # full player: video surface or art/placeholder, playlist overlay, bottom controls
+    │   └── NowPlayingScreen.kt  # full player: portrait/landscape media, playlist pane/overlay, controls
     └── theme/
         ├── Color.kt             # light/dark color scheme tonal stops
         └── Theme.kt              # EzmpvTheme (dynamic color on Android 12+, fallback scheme below)
 ```
 
-Four top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `NavigationBar` / side `NavigationRail`). A non-tab `now_playing` route hosts the full player. A `MiniPlayerBar` is pinned above the nav suite on all routes except `now_playing`.
+Four top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `NavigationBar` / side `NavigationRail`). The full player is an animated overlay above the tab content, not a navigation destination. Its open state is saveable across activity recreation, so orientation changes do not close it. A `MiniPlayerBar` is pinned above the nav suite whenever the full player is closed.
 
 ## Key conventions
 
@@ -81,7 +81,7 @@ There is **one shared `Player`** (MPVLib instance) for the whole app, owned by `
 - **`PlayerController`** (`player/PlayerController.kt`) — owns `Player`, `FolderRepository`, `ArtCache`, `FileCopyCache`, `MetadataCache`. Exposes `state: StateFlow<PlayerState>` and the methods UI calls (`selectTrack`, `playFromLibrary`, `playAdhoc`, `next`, `previous`, `togglePlayPause`, `seekTo`, `setAudioOnly`, `setPlaylistUserOverride`, folder grant/revoke/refresh). `ensureServiceStarted()` does `startForegroundService(PlayerService)`. Playback works without any UI attached (background).
 - **`PlayerService`** (`player/PlayerService.kt`) — `MediaSessionService`. `onCreate` starts mpv, builds `MpvPlayerAdapter`, creates and registers the `MediaSession`, collects `controller.state` on Main, and calls `adapter.refresh()` (= `invalidateState()`). The initial foreground notification is `Notification.MediaStyle`-backed with the platform session token; Media3's default provider subsequently publishes the metadata-driven notification. `onTaskRemoved` always releases the controller, removes the foreground notification, and stops the service so swiping the app from recents stops playback.
 - **`MpvPlayerAdapter`** (`player/MpvPlayerAdapter.kt`) — `@UnstableApi SimpleBasePlayer`. `getState()` builds a `State` from `controller.state` (playlist as `MediaItemData`, `playWhenReady`, `STATE_READY`/`STATE_IDLE`, position via `PositionSupplier`). It must advertise both playback commands and read commands (`COMMAND_GET_CURRENT_MEDIA_ITEM`, `COMMAND_GET_TIMELINE`, and `COMMAND_GET_METADATA`); without the read commands Media3's notification manager sees an empty timeline or null metadata and removes the media notification. Handlers: `handleSetPlayWhenReady`, `handleSeek` (next/prev/seek → `controller`), `handleStop`, `handleRelease`. Available controls are play/pause, previous, next, stop, and seek-to-media-item. **Do not call `setIsLoading` in `STATE_IDLE`/`STATE_ENDED`** — media3 throws `IllegalArgumentException: isLoading only allowed when not in STATE_IDLE or STATE_ENDED`. The `loading` flag in `PlayerState` is library-scan progress, not playback buffering; don't map it to media3 `isLoading`.
-- **UI** never owns a `Player`. `EzmpvApp` grabs `PlayerController` from the Application; screens receive it as a param and collect `controller.state`. `MpvSurface(player = controller.player, ...)` attaches/detaches the shared surface.
+- **UI** never owns a `Player`. `EzmpvApp` grabs `PlayerController` from the Application; screens receive it as a param and collect `controller.state`. `MpvSurface(player = controller.player, ...)` attaches/detaches the shared surface. `EzmpvApp` keeps the display awake only while the visible full player is actively playing a non-audio-only video, and hides the status bar while that player is open in landscape.
 
 ### Media3 system media controls
 
@@ -127,11 +127,12 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 
 ## Now Playing UI
 
-`NowPlayingScreen` is the full player (non-tab route):
+`NowPlayingScreen` is the full player overlay:
 
-- A rounded `Box` region holds the `MpvSurface` (when `hasVideo`) or album art, or a `surfaceContainerHighest` placeholder with a large music-note icon when there's no art.
-- The playlist, when toggled on, fades in as an **opaque overlay covering the same region** (not below the controls) — the video surface stays attached underneath.
-- Bottom controls: title/artist → seek `Slider` + time labels → a centered row with the **play/pause `FilledIconButton` (80dp, largest)**, **prev/next (56dp)**, and smaller 40dp aux buttons (playlist toggle left; audio-only toggle right, only for video tracks; spacer otherwise to keep symmetry).
+- In portrait, a rounded `Box` region holds the `MpvSurface` (when `hasVideo`) or album art, or a `surfaceContainerHighest` placeholder with a large music-note icon when there's no art. The playlist, when toggled on, fades in as an **opaque overlay covering the same region**; the video surface stays attached underneath.
+- In landscape, the media/art fills the main pane with playback controls overlaid at the bottom. The title and artist are shown in a themed top overlay, and the back button is overlaid in the top-left corner. When toggled on, the playlist is an opaque right-side pane rather than a media overlay.
+- Landscape controls are smaller than portrait controls and omit the duplicated title/artist section. The landscape metadata and control overlays auto-hide after four seconds; tapping the media/art area toggles them. The playlist pane remains visible independently.
+- Portrait bottom controls are title/artist → seek `Slider` + time labels → a centered row with the **play/pause `FilledIconButton` (80dp, largest)**, **prev/next (56dp)**, and smaller 40dp aux buttons (playlist toggle left; audio-only toggle right, only for video tracks; spacer otherwise to keep symmetry). Landscape uses the same actions with compact control sizes.
 
 ### Animated play/pause icon (`ui/components/AnimatedPlayPauseIcon.kt`)
 
@@ -139,7 +140,7 @@ A VLC-style **path morph**: parses the VLC play/pause path strings once, lerps t
 
 ## Mini player
 
-`MiniPlayerBar` (`ui/screens/MiniPlayerBar.kt`) is pinned above the nav suite on all routes except `now_playing`. When `hasVideo && !audioOnly`, the 44dp art area becomes a live `MpvSurface` (the shared `Player` renders into it); otherwise album art or a music-note icon. Row: art/video preview, title/artist, `AnimatedPlayPauseIcon`, next; a `LinearProgressIndicator` spans the top. Clicking it navigates to `now_playing`.
+`MiniPlayerBar` (`ui/screens/MiniPlayerBar.kt`) is pinned above the nav suite whenever the full player overlay is closed. When `hasVideo && !audioOnly`, the 44dp art area becomes a live `MpvSurface` (the shared `Player` renders into it); otherwise album art or a music-note icon. Row: art/video preview, title/artist, `AnimatedPlayPauseIcon`, next; a `LinearProgressIndicator` spans the top. Clicking it opens the full player overlay.
 
 ## Skills available in this repo
 
@@ -154,7 +155,7 @@ Load a skill with the `skill` tool before doing work it covers.
 
 ## Roadmap (not yet implemented)
 
-What's done: app shell, M3 dynamic theme, four-tab navigation, unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls, mini player (with live video preview) + Now Playing destination, Now Playing UI rework (art placeholder, playlist overlay, bottom-centered controls hierarchy, audio-only toggle), library browsers (Audio/Video tabs) with list/grid + group-by (Location/Artist/Album/Year) + scan-time metadata enrichment + DataStore cache, VLC-style animated play/pause icon.
+What's done: app shell, M3 dynamic theme, four-tab navigation, unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls, mini player (with live video preview) + persistent animated Now Playing overlay, portrait and landscape Now Playing layouts (including landscape right-side playlist, compact controls, auto-hiding overlays, and status-bar handling), screen-awake behavior for active foreground video playback, library browsers (Audio/Video tabs) with list/grid + group-by (Location/Artist/Album/Year) + scan-time metadata enrichment + DataStore cache, VLC-style animated play/pause icon.
 
 What's next (each is a separate iteration — don't try to do everything at once):
 
