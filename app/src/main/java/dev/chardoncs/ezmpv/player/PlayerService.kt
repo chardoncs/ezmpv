@@ -86,7 +86,7 @@ class PlayerService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
 
-    override fun onTaskRemoved(rootIntent: android.content.Intent?) {
+    override fun onTaskRemoved(rootIntent: Intent?) {
         (application as EzmpvApplication).playerController.release()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
