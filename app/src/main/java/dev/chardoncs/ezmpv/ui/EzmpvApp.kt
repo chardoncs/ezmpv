@@ -1,5 +1,6 @@
 package dev.chardoncs.ezmpv.ui
 
+import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -16,11 +17,22 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -48,13 +60,52 @@ fun EzmpvApp() {
     val controller = remember {
         (context.applicationContext as EzmpvApplication).playerController
     }
+    val state by controller.state.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val playerVisibilityState = remember { MutableTransitionState(false) }
+    var playerOpen by rememberSaveable { mutableStateOf(false) }
+    val isLandscape = LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val view = LocalView.current
+    val hideStatusBar = playerOpen && isLandscape
+
+    SideEffect {
+        playerVisibilityState.targetState = playerOpen
+    }
+
+    DisposableEffect(view, hideStatusBar) {
+        val insetsController = WindowCompat.getInsetsController(
+            (view.context as Activity).window,
+            view,
+        )
+        insetsController.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        if (hideStatusBar) {
+            insetsController.hide(WindowInsetsCompat.Type.statusBars())
+        } else {
+            insetsController.show(WindowInsetsCompat.Type.statusBars())
+        }
+        onDispose {
+            insetsController.show(WindowInsetsCompat.Type.statusBars())
+        }
+    }
+
+    val keepScreenOn = playerVisibilityState.targetState &&
+        state.hasVideo &&
+        !state.audioOnly &&
+        state.isPlaying
+
+    DisposableEffect(view, keepScreenOn) {
+        view.keepScreenOn = keepScreenOn
+        onDispose {
+            view.keepScreenOn = false
+        }
+    }
 
     BackHandler(enabled = playerVisibilityState.targetState) {
-        playerVisibilityState.targetState = false
+        playerOpen = false
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -80,13 +131,13 @@ fun EzmpvApp() {
                 EzmpvNavHost(
                     navController = navController,
                     controller = controller,
-                    onOpenPlayer = { playerVisibilityState.targetState = true },
+                    onOpenPlayer = { playerOpen = true },
                     modifier = Modifier.weight(1f),
                 )
                 if (!playerVisibilityState.currentState && !playerVisibilityState.targetState) {
                     MiniPlayerBar(
                         controller = controller,
-                        onClick = { playerVisibilityState.targetState = true },
+                        onClick = { playerOpen = true },
                     )
                 }
             }
@@ -117,7 +168,7 @@ fun EzmpvApp() {
         ) {
             NowPlayingScreen(
                 controller = controller,
-                onBack = { playerVisibilityState.targetState = false },
+                onBack = { playerOpen = false },
                 modifier = Modifier.fillMaxSize(),
             )
         }
