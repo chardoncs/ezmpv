@@ -3,9 +3,13 @@ package dev.chardoncs.ezmpv.player
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import dev.chardoncs.ezmpv.MainActivity
 import dev.chardoncs.ezmpv.EzmpvApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,16 +27,33 @@ class PlayerService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        startForeground(
-            NOTIFICATION_ID,
-            buildPlaceholderNotification(),
-            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+        setMediaNotificationProvider(
+            DefaultMediaNotificationProvider.Builder(this)
+                .setChannelId(CHANNEL_ID)
+                .setNotificationId(NOTIFICATION_ID)
+                .build()
         )
         val controller = (application as EzmpvApplication).playerController
         controller.player.start()
         val a = MpvPlayerAdapter(controller, mainLooper)
         adapter = a
-        mediaSession = MediaSession.Builder(this, a).build()
+        val session = MediaSession.Builder(this, a)
+            .setSessionActivity(
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    Intent(this, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            )
+            .build()
+        mediaSession = session
+        startForeground(
+            NOTIFICATION_ID,
+            buildMediaNotification(session),
+            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+        )
+        addSession(session)
         scope.launch {
             controller.state.collect { a.refresh() }
         }
@@ -51,11 +72,13 @@ class PlayerService : MediaSessionService() {
         }
     }
 
-    private fun buildPlaceholderNotification(): Notification {
+    private fun buildMediaNotification(session: MediaSession): Notification {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("ezmpv")
             .setContentText("Playing media")
             .setSmallIcon(android.R.drawable.ic_media_play)
+            .setCategory(Notification.CATEGORY_TRANSPORT)
+            .setStyle(Notification.MediaStyle().setMediaSession(session.platformToken))
             .setOngoing(true)
             .build()
     }
@@ -64,13 +87,13 @@ class PlayerService : MediaSessionService() {
         mediaSession
 
     override fun onTaskRemoved(rootIntent: android.content.Intent?) {
-        val player = mediaSession?.player
-        if (player == null || !player.playWhenReady) {
-            stopSelf()
-        }
+        (application as EzmpvApplication).playerController.release()
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     override fun onDestroy() {
+        (application as EzmpvApplication).playerController.release()
         mediaSession?.run {
             player.release()
             release()
