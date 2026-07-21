@@ -175,3 +175,9 @@ What's next (each is a separate iteration — don't try to do everything at once
 - Don't bump `minSdk` below 29 without reason (the AAR requires 26; we chose 29). `FOREGROUND_SERVICE_MEDIA_PLAYBACK` etc. only require manifest entries, not an SDK bump.
 - Don't call `setIsLoading(true)` on a media3 `SimpleBasePlayer.State` that's `STATE_IDLE` or `STATE_ENDED` — it throws. The `PlayerState.loading` flag is library-scan progress, not playback buffering.
 - Don't set `vo=gpu` before `attachSurface` — mpv will fatal with "Missing surface pointer". Always attach the surface first, then switch `vo`.
+
+## Documentation update
+
+### AGENTS.md
+
+When changes are made, it's a good practice to check AGENTS.md if there is stale guidance and update it.
