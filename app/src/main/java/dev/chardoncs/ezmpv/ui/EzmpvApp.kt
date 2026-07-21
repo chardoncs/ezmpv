@@ -1,5 +1,15 @@
 package dev.chardoncs.ezmpv.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Icon
@@ -26,7 +36,11 @@ import dev.chardoncs.ezmpv.ui.screens.NowPlayingScreen
 import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
 import dev.chardoncs.ezmpv.ui.screens.VideoScreen
 
-const val NOW_PLAYING_ROUTE = "now_playing"
+private const val PLAYER_ENTER_DURATION = 360
+private const val PLAYER_EXIT_DURATION = 240
+private const val PLAYER_FADE_IN_DELAY = 40
+private const val PLAYER_FADE_IN_DURATION = 220
+private const val PLAYER_FADE_OUT_DURATION = 160
 
 @Composable
 fun EzmpvApp() {
@@ -37,37 +51,75 @@ fun EzmpvApp() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val playerVisibilityState = remember { MutableTransitionState(false) }
 
-    NavigationSuiteScaffold(
-        navigationSuiteItems = {
-            TopLevelDestination.entries.forEach { destination ->
-                val selected = currentRoute == destination.route
-                item(
-                    selected = selected,
-                    onClick = { navController.navigateTo(destination) },
-                    icon = {
-                        Icon(
-                            imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
-                            contentDescription = stringResource(destination.labelRes),
-                        )
-                    },
-                    label = { Text(stringResource(destination.labelRes)) },
-                )
-            }
-        },
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            EzmpvNavHost(
-                navController = navController,
-                controller = controller,
-                modifier = Modifier.weight(1f),
-            )
-            if (currentRoute != NOW_PLAYING_ROUTE) {
-                MiniPlayerBar(
+    BackHandler(enabled = playerVisibilityState.targetState) {
+        playerVisibilityState.targetState = false
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        NavigationSuiteScaffold(
+            navigationSuiteItems = {
+                TopLevelDestination.entries.forEach { destination ->
+                    val selected = currentRoute == destination.route
+                    item(
+                        selected = selected,
+                        onClick = { navController.navigateTo(destination) },
+                        icon = {
+                            Icon(
+                                imageVector = if (selected) destination.selectedIcon else destination.unselectedIcon,
+                                contentDescription = stringResource(destination.labelRes),
+                            )
+                        },
+                        label = { Text(stringResource(destination.labelRes)) },
+                    )
+                }
+            },
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                EzmpvNavHost(
+                    navController = navController,
                     controller = controller,
-                    onClick = { navController.navigate(NOW_PLAYING_ROUTE) },
+                    onOpenPlayer = { playerVisibilityState.targetState = true },
+                    modifier = Modifier.weight(1f),
                 )
+                if (!playerVisibilityState.currentState && !playerVisibilityState.targetState) {
+                    MiniPlayerBar(
+                        controller = controller,
+                        onClick = { playerVisibilityState.targetState = true },
+                    )
+                }
             }
+        }
+
+        AnimatedVisibility(
+            visibleState = playerVisibilityState,
+            modifier = Modifier.fillMaxSize(),
+            enter = slideInVertically(
+                animationSpec = tween(PLAYER_ENTER_DURATION, easing = FastOutSlowInEasing),
+                initialOffsetY = { it },
+            ) + fadeIn(
+                animationSpec = tween(
+                    durationMillis = PLAYER_FADE_IN_DURATION,
+                    delayMillis = PLAYER_FADE_IN_DELAY,
+                    easing = FastOutSlowInEasing,
+                ),
+            ),
+            exit = slideOutVertically(
+                animationSpec = tween(PLAYER_EXIT_DURATION, easing = FastOutSlowInEasing),
+                targetOffsetY = { it },
+            ) + fadeOut(
+                animationSpec = tween(
+                    durationMillis = PLAYER_FADE_OUT_DURATION,
+                    easing = FastOutSlowInEasing,
+                ),
+            ),
+        ) {
+            NowPlayingScreen(
+                controller = controller,
+                onBack = { playerVisibilityState.targetState = false },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
     }
 }
@@ -76,6 +128,7 @@ fun EzmpvApp() {
 private fun EzmpvNavHost(
     navController: NavHostController,
     controller: PlayerController,
+    onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -88,21 +141,15 @@ private fun EzmpvNavHost(
                 when (destination) {
                     TopLevelDestination.VIDEO -> VideoScreen(
                         controller = controller,
-                        onOpenPlayer = { navController.navigate(NOW_PLAYING_ROUTE) },
+                        onOpenPlayer = onOpenPlayer,
                     )
                     TopLevelDestination.AUDIO -> AudioScreen(
                         controller = controller,
-                        onOpenPlayer = { navController.navigate(NOW_PLAYING_ROUTE) },
+                        onOpenPlayer = onOpenPlayer,
                     )
                     else -> PlaceholderScreen(destination = destination)
                 }
             }
-        }
-        composable(route = NOW_PLAYING_ROUTE) {
-            NowPlayingScreen(
-                controller = controller,
-                onBack = { navController.popBackStack() },
-            )
         }
     }
 }
