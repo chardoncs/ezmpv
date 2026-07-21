@@ -250,6 +250,9 @@ private fun LandscapeNowPlayingScreen(
                 IconButton(
                     onClick = onBack,
                     modifier = Modifier.padding(8.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
                 ) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                 }
@@ -263,6 +266,7 @@ private fun LandscapeNowPlayingScreen(
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+                    contentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
                     Modifier.fillMaxWidth().NowPlayingControls(
                         state = state,
@@ -373,10 +377,16 @@ private fun PlaylistOverlay(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = { onSelect(index) }) {
+                IconButton(
+                    onClick = { onSelect(index) },
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
+                ) {
                     dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
                         isPlaying = index == state.currentIndex && state.isPlaying,
                         contentDescription = "Play ${item.title}",
+                        tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
@@ -457,6 +467,9 @@ private fun Modifier.NowPlayingControls(
             IconButton(
                 onClick = onTogglePlaylist,
                 modifier = Modifier.size(if (compact) 36.dp else 40.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.QueueMusic,
@@ -469,6 +482,9 @@ private fun Modifier.NowPlayingControls(
                 onClick = onPrevious,
                 enabled = state.currentIndex > 0,
                 modifier = Modifier.size(if (compact) 44.dp else 56.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
             ) {
                 Icon(
                     Icons.Filled.SkipPrevious,
@@ -480,6 +496,10 @@ private fun Modifier.NowPlayingControls(
                 onClick = onPlayPause,
                 modifier = Modifier.size(if (compact) 64.dp else 80.dp),
                 shape = IconButtonDefaults.filledShape,
+                colors = IconButtonDefaults.filledIconButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
             ) {
                 dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
                     isPlaying = state.isPlaying,
@@ -487,12 +507,16 @@ private fun Modifier.NowPlayingControls(
                     modifier = Modifier.size(if (compact) 44.dp else 56.dp),
                     showRing = false,
                     glyphScaleFactor = 1.7f,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                 )
             }
             IconButton(
                 onClick = onNext,
                 enabled = state.currentIndex in 0 until state.playlist.size - 1,
                 modifier = Modifier.size(if (compact) 44.dp else 56.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
             ) {
                 Icon(
                     Icons.Filled.SkipNext,
@@ -504,6 +528,9 @@ private fun Modifier.NowPlayingControls(
                 IconButton(
                     onClick = onToggleAudioOnly,
                     modifier = Modifier.size(if (compact) 36.dp else 40.dp),
+                    colors = IconButtonDefaults.iconButtonColors(
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ),
                 ) {
                     Icon(
                         Icons.Filled.MusicNote,

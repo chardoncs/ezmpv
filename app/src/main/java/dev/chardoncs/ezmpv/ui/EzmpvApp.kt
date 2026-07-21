@@ -69,26 +69,26 @@ fun EzmpvApp() {
     val isLandscape = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val view = LocalView.current
-    val hideStatusBar = playerOpen && isLandscape
+    val hideSystemBars = playerOpen && isLandscape
 
     SideEffect {
         playerVisibilityState.targetState = playerOpen
     }
 
-    DisposableEffect(view, hideStatusBar) {
+    DisposableEffect(view, hideSystemBars) {
         val insetsController = WindowCompat.getInsetsController(
             (view.context as Activity).window,
             view,
         )
         insetsController.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        if (hideStatusBar) {
-            insetsController.hide(WindowInsetsCompat.Type.statusBars())
+        if (hideSystemBars) {
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
         } else {
-            insetsController.show(WindowInsetsCompat.Type.statusBars())
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
         }
         onDispose {
-            insetsController.show(WindowInsetsCompat.Type.statusBars())
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
         }
     }
 
