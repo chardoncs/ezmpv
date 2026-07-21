@@ -58,8 +58,8 @@ class Player(private val context: Context) {
         }
         try {
             m.setOptionString("config", "yes")
-            m.setOptionString("force-window", "auto")
-            m.setOptionString("vo", "gpu")
+            m.setOptionString("force-window", "no")
+            m.setOptionString("vo", "null")
             m.setOptionString("vid", "auto")
             m.setOptionString("aid", "auto")
             m.setOptionString("idle", "yes")
@@ -130,13 +130,14 @@ class Player(private val context: Context) {
             m.setPropertyString("vo", "null")
             m.setPropertyString("force-window", "no")
         } else {
-            m.setPropertyString("vo", "gpu")
-            m.setPropertyString("vid", "auto")
-            m.setPropertyString("force-window", "auto")
-            surface?.let {
-                m.attachSurface(it)
-                m.setOptionString("force-window", "yes")
-                hasSurfaceAttached = true
+            if (surface != null) {
+                surface?.let {
+                    m.attachSurface(it)
+                    hasSurfaceAttached = true
+                }
+                m.setPropertyString("vo", "gpu")
+                m.setPropertyString("vid", "auto")
+                m.setPropertyString("force-window", "auto")
             }
         }
     }
@@ -145,9 +146,9 @@ class Player(private val context: Context) {
         val m = mpv ?: return
         surface = s
         if (!_state.value.audioOnly) {
+            m.attachSurface(s)
             m.setPropertyString("vo", "gpu")
             m.setPropertyString("vid", "auto")
-            m.attachSurface(s)
             m.setOptionString("force-window", "yes")
             hasSurfaceAttached = true
         }

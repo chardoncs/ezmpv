@@ -104,7 +104,7 @@ fun NowPlayingScreen(
                 } else {
                     AlbumArtOrPlaceholder(state = state)
                 }
-                androidx.compose.animation.AnimatedVisibility(
+                this@Column.AnimatedVisibility(
                     visible = state.playlistVisible,
                     enter = fadeIn(),
                     exit = fadeOut(),

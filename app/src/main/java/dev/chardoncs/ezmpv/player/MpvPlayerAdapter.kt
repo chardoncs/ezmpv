@@ -43,19 +43,18 @@ class MpvPlayerAdapter(
             .setAvailableCommands(AVAILABLE_COMMANDS)
             .setPlayWhenReady(
                 s.isPlaying,
-                Media3Player.PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST,
+                PLAY_WHEN_READY_CHANGE_REASON_USER_REQUEST,
             )
-            .setPlaybackSuppressionReason(Media3Player.PLAYBACK_SUPPRESSION_REASON_NONE)
+            .setPlaybackSuppressionReason(PLAYBACK_SUPPRESSION_REASON_NONE)
             .setPlaybackState(
-                if (s.currentIndex in s.playlist.indices) Media3Player.STATE_READY
-                else Media3Player.STATE_IDLE
+                if (s.currentIndex in s.playlist.indices) STATE_READY
+                else STATE_IDLE
             )
             .setPlaylist(items)
             .setCurrentMediaItemIndex(
                 s.currentIndex.coerceIn(0, (s.playlist.size - 1).coerceAtLeast(0))
             )
-            .setContentPositionMs(PositionSupplier { controller.player.state.value.positionMs })
-            .setIsLoading(s.loading)
+            .setContentPositionMs { controller.player.state.value.positionMs }
             .build()
     }
 
@@ -90,12 +89,12 @@ class MpvPlayerAdapter(
     companion object {
         private val AVAILABLE_COMMANDS = Media3Player.Commands.Builder()
             .addAll(
-                Media3Player.COMMAND_PLAY_PAUSE,
-                Media3Player.COMMAND_STOP,
-                Media3Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
-                Media3Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
-                Media3Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
-                Media3Player.COMMAND_SEEK_TO_MEDIA_ITEM,
+                COMMAND_PLAY_PAUSE,
+                COMMAND_STOP,
+                COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM,
+                COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM,
+                COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
+                COMMAND_SEEK_TO_MEDIA_ITEM,
             )
             .build()
     }
