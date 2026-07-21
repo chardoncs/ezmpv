@@ -1,6 +1,5 @@
 package dev.chardoncs.ezmpv.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -59,6 +58,7 @@ import dev.chardoncs.ezmpv.player.MpvSurface
 import dev.chardoncs.ezmpv.player.PlayerController
 import dev.chardoncs.ezmpv.player.PlayerState
 import dev.chardoncs.ezmpv.player.playlistVisible
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val LANDSCAPE_OVERLAY_TIMEOUT_MS = 4000L
 
@@ -154,7 +154,7 @@ private fun PortraitNowPlayingScreen(
                     }
                 }
             }
-            NowPlayingControls(
+            Modifier.fillMaxWidth().NowPlayingControls(
                 state = state,
                 isVideoTrack = state.playlist.getOrNull(state.currentIndex)?.isVideo == true,
                 onPlayPause = controller::togglePlayPause,
@@ -163,7 +163,6 @@ private fun PortraitNowPlayingScreen(
                 onPrevious = controller::previous,
                 onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
                 onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
-                modifier = Modifier.fillMaxWidth(),
             )
         }
     }
@@ -183,7 +182,7 @@ private fun LandscapeNowPlayingScreen(
     }
     LaunchedEffect(controlsVisible, state.currentIndex, state.isPlaying) {
         if (controlsVisible) {
-            delay(LANDSCAPE_OVERLAY_TIMEOUT_MS)
+            delay(LANDSCAPE_OVERLAY_TIMEOUT_MS.milliseconds)
             controlsVisible = false
         }
     }
@@ -265,7 +264,7 @@ private fun LandscapeNowPlayingScreen(
                     modifier = Modifier.fillMaxWidth(),
                     color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
                 ) {
-                    NowPlayingControls(
+                    Modifier.fillMaxWidth().NowPlayingControls(
                         state = state,
                         isVideoTrack = state.playlist.getOrNull(state.currentIndex)?.isVideo == true,
                         onPlayPause = controller::togglePlayPause,
@@ -276,7 +275,6 @@ private fun LandscapeNowPlayingScreen(
                         onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
                         compact = true,
                         showTrackInfo = false,
-                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
             }
@@ -387,7 +385,7 @@ private fun PlaylistOverlay(
 }
 
 @Composable
-private fun NowPlayingControls(
+private fun Modifier.NowPlayingControls(
     state: PlayerState,
     isVideoTrack: Boolean,
     onPlayPause: () -> Unit,
@@ -398,13 +396,12 @@ private fun NowPlayingControls(
     onTogglePlaylist: () -> Unit,
     compact: Boolean = false,
     showTrackInfo: Boolean = true,
-    modifier: Modifier = Modifier,
 ) {
     val track = state.playlist.getOrNull(state.currentIndex)
     var dragPosition by remember { mutableStateOf<Long?>(null) }
 
     Column(
-        modifier = modifier.padding(
+        modifier = padding(
             horizontal = if (compact) 12.dp else 16.dp,
             vertical = if (compact) 4.dp else 8.dp,
         ),
