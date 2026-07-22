@@ -186,8 +186,15 @@ fun LibraryScreen(
             groupBy = groupBy,
             onGrant = { grantLauncher.launch(null) },
             onPlay = { libraryIndex ->
-                val queue = tracks.map { it.value }
-                val posInQueue = tracks.indexOfFirst { it.index == libraryIndex }.coerceAtLeast(0)
+                val selected = state.library.getOrNull(libraryIndex)
+                val selectedFolder = selected?.let { parentFolder(it.sourceUri) }
+                val queue = tracks
+                    .map { it.value }
+                    .filter { item ->
+                        selectedFolder == null || parentFolder(item.sourceUri) == selectedFolder
+                    }
+                val posInQueue = queue.indexOfFirst { it.sourceUri == selected?.sourceUri }
+                    .coerceAtLeast(0)
                 controller.playFromLibrary(queue, posInQueue)
                 onOpenPlayer()
             },

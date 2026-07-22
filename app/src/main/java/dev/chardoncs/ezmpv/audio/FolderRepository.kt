@@ -45,7 +45,7 @@ class FolderRepository(private val context: Context) {
         if (!tree.isDirectory) return@withContext emptyList()
         val out = mutableListOf<MediaItem>()
         collectMedia(tree, out)
-        out.map { enrich(it) }.sortedBy { it.title.lowercase() }
+        out.map { enrich(it) }
     }
 
     private suspend fun enrich(item: MediaItem): MediaItem {

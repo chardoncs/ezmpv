@@ -10,11 +10,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
 private const val TAG = "Player"
+private const val MPV_EVENT_END_FILE = 7
+private const val MPV_EVENT_FILE_LOADED = 8
 
 class Player(private val context: Context) {
 
-    var onTrackEnd: (() -> Unit)? = null
+    var onTrackEnd: ((Int?) -> Unit)? = null
     private var eofHandled = false
+    private var playbackEnded = false
+    private var awaitingFileLoaded = false
     private var surface: Surface? = null
     private var hasSurfaceAttached = false
 
@@ -28,11 +32,10 @@ class Player(private val context: Context) {
         }
         override fun eventProperty(property: String, value: Boolean) {
             when (property) {
-                "pause" -> _state.update { it.copy(isPlaying = !value) }
-                "eof-reached" -> if (value && !eofHandled) {
-                    eofHandled = true
-                    onEof()
+                "pause" -> if (!playbackEnded || value) {
+                    _state.update { it.copy(isPlaying = !value) }
                 }
+                "eof-reached" -> if (value && !awaitingFileLoaded) handleEndFile()
             }
         }
         override fun eventProperty(property: String, value: Double) {
@@ -42,7 +45,12 @@ class Player(private val context: Context) {
             }
         }
         override fun eventProperty(property: String, value: String) {}
-        override fun event(eventId: Int) {}
+        override fun event(eventId: Int) {
+            when (eventId) {
+                MPV_EVENT_END_FILE -> if (!awaitingFileLoaded) handleEndFile()
+                MPV_EVENT_FILE_LOADED -> awaitingFileLoaded = false
+            }
+        }
     }
 
     private val _state = MutableStateFlow(PlayerState())
@@ -86,6 +94,8 @@ class Player(private val context: Context) {
         }
         mpv = null
         eofHandled = false
+        playbackEnded = false
+        awaitingFileLoaded = false
         _state.update {
             PlayerState(
                 playlist = it.playlist,
@@ -98,6 +108,8 @@ class Player(private val context: Context) {
     fun loadFile(path: String, index: Int) {
         val m = mpv ?: return
         eofHandled = false
+        playbackEnded = false
+        awaitingFileLoaded = true
         _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0) }
         m.command(arrayOf("loadfile", path, "replace"))
         m.setPropertyBoolean("pause", false)
@@ -110,6 +122,7 @@ class Player(private val context: Context) {
     fun playPause() {
         val m = mpv ?: return
         val paused = m.getPropertyBoolean("pause") ?: false
+        if (paused) playbackEnded = false
         m.setPropertyBoolean("pause", !paused)
     }
 
@@ -176,14 +189,14 @@ class Player(private val context: Context) {
         surface = null
     }
 
-    private fun onEof() {
+    private fun handleEndFile() {
+        if (eofHandled) return
+        eofHandled = true
+        playbackEnded = true
         val current = _state.value
         val next = current.currentIndex + 1
-        if (next in current.playlist.indices) {
-            _state.update { it.copy(currentIndex = next) }
-            onTrackEnd?.invoke()
-        } else {
-            _state.update { it.copy(isPlaying = false) }
-        }
+        mpv?.setPropertyBoolean("pause", true)
+        _state.update { it.copy(isPlaying = false) }
+        onTrackEnd?.invoke(next.takeIf { it in current.playlist.indices })
     }
 }

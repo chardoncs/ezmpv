@@ -9,8 +9,11 @@ import dev.chardoncs.ezmpv.audio.FileCopyCache
 import dev.chardoncs.ezmpv.audio.FolderRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +29,9 @@ class PlayerController(private val app: Context) {
     private val metadataCache = dev.chardoncs.ezmpv.audio.MetadataCache(app)
 
     val player = Player(app).apply {
-        onTrackEnd = { advanceToCurrent() }
+        onTrackEnd = { nextIndex ->
+            nextIndex?.let(::selectTrack)
+        }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -35,6 +40,7 @@ class PlayerController(private val app: Context) {
     val state: StateFlow<PlayerState> = _state.asStateFlow()
 
     private var serviceStarted = false
+    private var loadJob: Job? = null
 
     init {
         _state.update { it.copy(selectedFolders = folderRepo.grantedFolders()) }
@@ -91,7 +97,8 @@ class PlayerController(private val app: Context) {
         val item = library.getOrNull(index) ?: return
         ensureServiceStarted()
         player.start()
-        scope.launch {
+        loadJob?.cancel()
+        loadJob = scope.launch {
             _state.update {
                 it.copy(playlist = library, currentIndex = index, loading = true)
             }
@@ -105,6 +112,7 @@ class PlayerController(private val app: Context) {
             _state.update { it.copy(loading = false, error = "Failed to copy ${item.title}") }
             return
         }
+        currentCoroutineContext().ensureActive()
         player.loadFile(file.absolutePath, index)
         if (!item.isVideo) {
             val art = artCache.getArt(item)
@@ -142,7 +150,8 @@ class PlayerController(private val app: Context) {
         val item = _state.value.playlist.getOrNull(index) ?: return
         ensureServiceStarted()
         player.start()
-        scope.launch {
+        loadJob?.cancel()
+        loadJob = scope.launch {
             _state.update { it.copy(currentIndex = index, loading = true) }
             loadAndPlay(item, index)
         }
@@ -193,11 +202,6 @@ class PlayerController(private val app: Context) {
 
     fun setPlaylistUserOverride(visible: Boolean?) {
         _state.update { it.copy(playlistUserOverride = visible) }
-    }
-
-    private fun advanceToCurrent() {
-        val i = player.state.value.currentIndex
-        if (i >= 0) selectTrack(i)
     }
 
     fun release() {
