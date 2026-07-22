@@ -70,7 +70,6 @@ fun NowPlayingScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
-    val track = state.playlist.getOrNull(state.currentIndex)
     val isLandscape = LocalConfiguration.current.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
@@ -85,7 +84,6 @@ fun NowPlayingScreen(
         PortraitNowPlayingScreen(
             controller = controller,
             state = state,
-            trackTitle = track?.title,
             onBack = onBack,
             modifier = modifier,
         )
@@ -97,28 +95,11 @@ fun NowPlayingScreen(
 private fun PortraitNowPlayingScreen(
     controller: PlayerController,
     state: PlayerState,
-    trackTitle: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = trackTitle ?: "Now Playing",
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
     ) { innerPadding ->
         Column(
             modifier = Modifier
