@@ -104,10 +104,6 @@ fun EzmpvApp() {
         }
     }
 
-    BackHandler(enabled = playerVisibilityState.targetState) {
-        playerOpen = false
-    }
-
     Box(modifier = Modifier.fillMaxSize()) {
         NavigationSuiteScaffold(
             navigationSuiteItems = {
@@ -172,6 +168,10 @@ fun EzmpvApp() {
                 modifier = Modifier.fillMaxSize(),
             )
         }
+    }
+
+    BackHandler(enabled = playerOpen) {
+        playerOpen = false
     }
 }
 
