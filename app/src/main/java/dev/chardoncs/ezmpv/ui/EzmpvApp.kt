@@ -10,14 +10,17 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,6 +32,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -47,12 +54,14 @@ import dev.chardoncs.ezmpv.ui.screens.MiniPlayerBar
 import dev.chardoncs.ezmpv.ui.screens.NowPlayingScreen
 import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
 import dev.chardoncs.ezmpv.ui.screens.VideoScreen
+import kotlin.math.roundToInt
 
 private const val PLAYER_ENTER_DURATION = 360
 private const val PLAYER_EXIT_DURATION = 240
 private const val PLAYER_FADE_IN_DELAY = 40
 private const val PLAYER_FADE_IN_DURATION = 220
 private const val PLAYER_FADE_OUT_DURATION = 160
+private const val PLAYER_DISMISS_THRESHOLD_DP = 96
 
 @Composable
 fun EzmpvApp() {
@@ -70,6 +79,14 @@ fun EzmpvApp() {
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val view = LocalView.current
     val hideSystemBars = playerOpen && isLandscape
+    var swipeOffset by remember { mutableStateOf(0f) }
+    val swipeThreshold = with(androidx.compose.ui.platform.LocalDensity.current) {
+        PLAYER_DISMISS_THRESHOLD_DP.dp.toPx()
+    }
+
+    LaunchedEffect(playerOpen) {
+        if (playerOpen) swipeOffset = 0f
+    }
 
     SideEffect {
         playerVisibilityState.targetState = playerOpen
@@ -141,7 +158,32 @@ fun EzmpvApp() {
 
         AnimatedVisibility(
             visibleState = playerVisibilityState,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .offset { IntOffset(0, swipeOffset.roundToInt()) }
+                .graphicsLayer {
+                    alpha = 1f - (swipeOffset / size.height).coerceIn(0f, 0.35f)
+                }
+                .pointerInput(playerOpen) {
+                    detectVerticalDragGestures(
+                        onVerticalDrag = { change, dragAmount ->
+                            if (dragAmount > 0f || swipeOffset > 0f) {
+                                change.consume()
+                                swipeOffset = (swipeOffset + dragAmount).coerceAtLeast(0f)
+                            }
+                        },
+                        onDragEnd = {
+                            if (swipeOffset >= swipeThreshold) {
+                                playerOpen = false
+                            } else {
+                                swipeOffset = 0f
+                            }
+                        },
+                        onDragCancel = {
+                            swipeOffset = 0f
+                        },
+                    )
+                },
             enter = slideInVertically(
                 animationSpec = tween(PLAYER_ENTER_DURATION, easing = FastOutSlowInEasing),
                 initialOffsetY = { it },
