@@ -5,7 +5,9 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -64,6 +66,7 @@ import dev.chardoncs.ezmpv.player.playlistVisible
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val LANDSCAPE_OVERLAY_TIMEOUT_MS = 4000L
+private val LANDSCAPE_PLAYLIST_WIDTH = 320.dp
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -75,8 +78,19 @@ fun NowPlayingScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
-    val isLandscape = LocalConfiguration.current.orientation ==
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    LaunchedEffect(isLandscape, state.playlistVisible, state.hasVideo) {
+        if (state.hasVideo) {
+            val ratio = if (isLandscape && state.playlistVisible) {
+                val screenWidthDp = configuration.screenWidthDp
+                if (screenWidthDp > 0) LANDSCAPE_PLAYLIST_WIDTH.value / screenWidthDp else 0f
+            } else 0f
+            controller.player.setVideoRightMarginRatio(ratio)
+        }
+    }
 
     if (isLandscape) {
         LandscapeNowPlayingScreen(
@@ -215,7 +229,7 @@ private fun LandscapeNowPlayingScreen(
     }
 
     with(sharedTransitionScope) {
-        Row(
+        Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface)
@@ -226,23 +240,18 @@ private fun LandscapeNowPlayingScreen(
         ) {
         Box(
             modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight(),
+                .fillMaxSize()
+                .clickable { controlsVisible = !controlsVisible },
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { controlsVisible = !controlsVisible },
-            ) {
-                PlayerVisual(
-                    state = state,
-                    controller = controller,
-                    sharedTransitionScope = sharedTransitionScope,
-                    animatedVisibilityScope = animatedVisibilityScope,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-            Box(modifier = Modifier.align(Alignment.TopCenter)) {
+            PlayerVisual(
+                state = state,
+                controller = controller,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        Box(modifier = Modifier.align(Alignment.TopCenter)) {
                 androidx.compose.animation.AnimatedVisibility(
                     visible = controlsVisible,
                     enter = fadeIn(),
@@ -319,23 +328,27 @@ private fun LandscapeNowPlayingScreen(
                 }
                 }
             }
-        }
-        if (state.playlistVisible) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(320.dp),
-                color = MaterialTheme.colorScheme.surfaceContainer,
+            androidx.compose.animation.AnimatedVisibility(
+                visible = state.playlistVisible,
+                enter = slideInHorizontally(initialOffsetX = { it }),
+                exit = slideOutHorizontally(targetOffsetX = { it }),
+                modifier = Modifier.align(Alignment.CenterEnd),
             ) {
-                Column(modifier = Modifier.fillMaxHeight()) {
-                    PlaylistOverlay(
-                        state = state,
-                        onSelect = controller::selectTrack,
-                        modifier = Modifier.weight(1f),
-                    )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(320.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                ) {
+                    Column(modifier = Modifier.fillMaxHeight()) {
+                        PlaylistOverlay(
+                            state = state,
+                            onSelect = controller::selectTrack,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
-        }
         }
     }
 }

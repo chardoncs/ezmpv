@@ -133,6 +133,11 @@ class Player(private val context: Context) {
         _state.update { it.copy(positionMs = ms) }
     }
 
+    fun setVideoRightMarginRatio(ratio: Float) {
+        val m = mpv ?: return
+        runCatching { m.setPropertyDouble("video-margin-ratio-right", ratio.coerceIn(0f, 0.95f).toDouble()) }
+    }
+
     fun setAudioOnly(audioOnly: Boolean) {
         val m = mpv ?: return
         _state.update { it.copy(audioOnly = audioOnly) }
