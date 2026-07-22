@@ -41,13 +41,12 @@ private const val MINI_PLAYER_EXPAND_THRESHOLD_DP = 64
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun MiniPlayerBar(
+fun Modifier.MiniPlayerBar(
     controller: PlayerController,
     onClick: () -> Unit,
     onExpandProgress: (Float) -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
-    modifier: Modifier = Modifier,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val track = state.playlist.getOrNull(state.currentIndex) ?: return
@@ -60,7 +59,7 @@ fun MiniPlayerBar(
 
     with(sharedTransitionScope) {
         Surface(
-            modifier = modifier
+            modifier = this@MiniPlayerBar
                 .fillMaxWidth()
                 .onSizeChanged { size ->
                     if (baseHeightPx == 0) baseHeightPx = size.height

@@ -147,7 +147,7 @@ fun EzmpvApp() {
                             enter = fadeIn(tween(200)),
                             exit = fadeOut(tween(150)),
                         ) {
-                            MiniPlayerBar(
+                            Modifier.MiniPlayerBar(
                                 controller = controller,
                                 onClick = { playerOpen = true },
                                 sharedTransitionScope = sharedScope,
