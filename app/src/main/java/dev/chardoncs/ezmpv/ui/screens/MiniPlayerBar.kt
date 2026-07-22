@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -22,7 +20,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,8 +44,8 @@ fun MiniPlayerBar(
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val track = state.playlist.getOrNull(state.currentIndex) ?: return
-    var swipeOffset by remember { mutableStateOf(0f) }
-    var baseHeightPx by remember { mutableStateOf(0) }
+    var swipeOffset by remember { mutableFloatStateOf(0f) }
+    var baseHeightPx by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     val expandThreshold = with(androidx.compose.ui.platform.LocalDensity.current) {
         MINI_PLAYER_EXPAND_THRESHOLD_DP.dp.toPx()
     }
