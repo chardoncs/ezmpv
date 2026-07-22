@@ -131,7 +131,7 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 
 - In portrait, a rounded `Box` region holds the `MpvSurface` (when `hasVideo`) or album art, or a `surfaceContainerHighest` placeholder with a large music-note icon when there's no art. The playlist, when toggled on, fades in as an **opaque overlay covering the same region**; the video surface stays attached underneath.
 - In landscape, the media/art fills the main pane with playback controls overlaid at the bottom. The title and artist are shown in a themed top overlay, and the back button is overlaid in the top-left corner. When toggled on, the playlist is an opaque right-side pane rather than a media overlay.
-- Landscape controls are smaller than portrait controls and omit the duplicated title/artist section. The landscape metadata and control overlays auto-hide after four seconds; tapping the media/art area toggles them. The playlist pane remains visible independently.
+- Landscape controls are smaller than portrait controls and omit the duplicated title/artist section. The landscape metadata and control overlays auto-hide after four seconds; tapping the media/art area toggles them. A downward swipe on the full-player overlay moves it with the gesture and dismisses it after a 96dp threshold; shorter swipes snap back. The playlist pane remains visible independently.
 - Portrait bottom controls are title/artist → seek `Slider` + time labels → a centered row with the **play/pause `FilledIconButton` (80dp, largest)**, **prev/next (56dp)**, and smaller 40dp aux buttons (playlist toggle left; audio-only toggle right, only for video tracks; spacer otherwise to keep symmetry). Landscape uses the same actions with compact control sizes.
 
 ### Animated play/pause icon (`ui/components/AnimatedPlayPauseIcon.kt`)
@@ -140,7 +140,7 @@ A VLC-style **path morph**: parses the VLC play/pause path strings once, lerps t
 
 ## Mini player
 
-`MiniPlayerBar` (`ui/screens/MiniPlayerBar.kt`) is pinned above the nav suite whenever the full player overlay is closed. When `hasVideo && !audioOnly`, the 44dp art area becomes a live `MpvSurface` (the shared `Player` renders into it); otherwise album art or a music-note icon. Row: art/video preview, title/artist, `AnimatedPlayPauseIcon`, next; a `LinearProgressIndicator` spans the top. Clicking it opens the full player overlay.
+`MiniPlayerBar` (`ui/screens/MiniPlayerBar.kt`) is pinned above the nav suite whenever the full player overlay is closed. When `hasVideo && !audioOnly`, the 44dp art area becomes a live `MpvSurface` (the shared `Player` renders into it); otherwise album art or a music-note icon. Row: art/video preview, title/artist, `AnimatedPlayPauseIcon`, next; a `LinearProgressIndicator` spans the top. Clicking it opens the full player overlay, and an upward swipe expands the bar upward with the controls at its top, opening the player after release past the 64dp threshold.
 
 ## Skills available in this repo
 
