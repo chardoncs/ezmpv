@@ -6,7 +6,7 @@ Guide for AI agents (and human contributors) working on the **ezmpv** codebase.
 
 ezmpv is an mpv-based video and audio player for Android aiming for an easy-to-use UI. It is built with:
 
-- **Jetpack Compose** + **Material 3** (Material You / dynamic color on Android 12+)
+- **Jetpack Compose** + **Material 3** (Material You / dynamic color on Android 12+) + **Compose Animation** (`androidx.compose.animation:animation`) for `SharedTransitionLayout` (mini↔full player morph)
 - **libmpv** consumed as a Maven Central AAR (`dev.jdtech.mpv:libmpv`), not built from source
 - **Media3** (`androidx.media3:media3-session` 1.10.1) for the media session / notification / lockscreen / Bluetooth controls, wrapping our mpv `Player` via a `SimpleBasePlayer` adapter — no ExoPlayer.
 - **kotlinx-serialization-json** 1.11.0 for the metadata cache.
@@ -49,17 +49,18 @@ app/src/main/java/dev/chardoncs/ezmpv/
 │   ├── MetadataCache.kt         # DataStore-backed JSON cache of enriched metadata (survives reboots)
 │   └── LibraryPreferences.kt    # DataStore-backed ViewMode + GroupBy prefs
 └── ui/
-    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 tabs) + MiniPlayerBar + player overlay
+    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 tabs) + MiniPlayerBar + player overlay (SharedTransitionLayout)
     ├── TopLevelDestination.kt  # enum: BROWSE (start), VIDEO, AUDIO, MORE
     ├── components/
-    │   └── AnimatedPlayPauseIcon.kt  # VLC-style path-morph play↔pause (Canvas, no XML drawables)
+    │   ├── AnimatedPlayPauseIcon.kt  # VLC-style path-morph play↔pause (Canvas, no XML drawables)
+    │   └── CompactTrackHeader.kt     # reusable 44dp art+title/artist row (mini-player styling) used in playlist pane
     ├── screens/
     │   ├── PlaceholderScreen.kt  # Browse/More placeholder
     │   ├── LibraryScreen.kt     # shared Audio+Video browser: list/grid + group-by + folder menu + pick-file
     │   ├── AudioScreen.kt       # thin wrapper → LibraryScreen(AUDIO)
     │   ├── VideoScreen.kt       # thin wrapper → LibraryScreen(VIDEO, showPickFile)
-    │   ├── MiniPlayerBar.kt     # mini player above nav; live video preview when hasVideo && !audioOnly
-    │   └── NowPlayingScreen.kt  # full player: portrait/landscape media, playlist pane/overlay, controls
+    │   ├── MiniPlayerBar.kt     # mini player above nav; live video preview; shared-element morph to Now Playing
+    │   └── NowPlayingScreen.kt  # full player: portrait/landscape media, playlist pane/overlay, shared-element morph
     └── theme/
         ├── Color.kt             # light/dark color scheme tonal stops
         └── Theme.kt              # EzmpvTheme (dynamic color on Android 12+, fallback scheme below)
@@ -98,7 +99,7 @@ The `dev.jdtech.mpv:libmpv` AAR (v1.0.0) is an instance-based MIT-licensed fork 
 
 ### Start mpv with `vo=null` and only switch to `vo=gpu` once a surface is attached
 
-`Player.start()` initializes mpv with `vo=null`, `force-window=no`, `vid=auto`. A file can be `loadfile`'d safely with no surface attached — mpv decodes video to the null output and plays audio. When a `Surface` arrives (`attachSurface`), it calls **`m.attachSurface(s)` first, then `m.setPropertyString("vo", "gpu")`** — the order matters: setting `vo=gpu` before the surface pointer (`wid`) is set causes `vo/gpu/android: fatal: Missing surface pointer` and the video output fails (audio-only playback, no graphics). Same ordering applies in `setAudioOnly(false)`.
+`Player.start()` initializes mpv with `vo=null`, `force-window=no`, `vid=auto`, `keepaspect=yes`. A file can be `loadfile`'d safely with no surface attached — mpv decodes video to the null output and plays audio. `keepaspect=yes` ensures video preserves its aspect ratio when the surface resizes (e.g. when the landscape playlist pane shrinks the video area). When a `Surface` arrives (`attachSurface`), it calls **`m.attachSurface(s)` first, then `m.setPropertyString("vo", "gpu")`** — the order matters: setting `vo=gpu` before the surface pointer (`wid`) is set causes `vo/gpu/android: fatal: Missing surface pointer` and the video output fails (audio-only playback, no graphics). Same ordering applies in `setAudioOnly(false)`.
 
 ### The surface-attach race (gotcha — read this before touching `MpvSurface.kt`)
 
@@ -127,12 +128,21 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 
 ## Now Playing UI
 
-`NowPlayingScreen` is the full player overlay:
+`NowPlayingScreen` is the full player overlay, wrapped in a `SharedTransitionLayout` (Compose `androidx.compose.animation`) so the album-art/video surface and player container morph between the mini player and the full Now Playing screen:
 
-- In portrait, a rounded `Box` region holds the `MpvSurface` (when `hasVideo`) or album art, or a `surfaceContainerHighest` placeholder with a large music-note icon when there's no art. The playlist, when toggled on, fades in as an **opaque overlay covering the same region**; the video surface stays attached underneath.
-- In landscape, the media/art fills the main pane with playback controls overlaid at the bottom. The title and artist are shown in a themed top overlay, and the back button is overlaid in the top-left corner. When toggled on, the playlist is an opaque right-side pane rather than a media overlay.
+- The mini player's container and art area share `sharedBounds`/`sharedElement` keys (`"player-container"`, `"player-art"`) with the Now Playing screen's container and `PlayerVisual` region. Opening/closing (tap, swipe, back) animates the art from 44dp to the full media region and the container from mini-player height to full screen, instead of a cross-fade.
+- In portrait, a rounded `Box` region holds the `MpvSurface` (when `hasVideo`) or album art, or a `surfaceContainerHighest` placeholder with a large music-note icon when there's no art. The playlist, when toggled on, fades in as an **opaque overlay covering the same region**; the video surface stays attached underneath. When the playlist is visible, a `CompactTrackHeader` (44dp art + title/artist, matching the mini player's row styling) appears at the top, and the bottom controls omit the duplicate title/artist.
+- In landscape, the media/art fills the main pane with playback controls overlaid at the bottom. The title and artist are shown in a themed top overlay, and the back button is overlaid in the top-left corner. When toggled on, the playlist is an opaque right-side pane with a `CompactTrackHeader` at its top rather than a media overlay.
 - Landscape controls are smaller than portrait controls and omit the duplicated title/artist section. The landscape metadata and control overlays auto-hide after four seconds; tapping the media/art area toggles them. A downward swipe on the full-player overlay moves it with the gesture and dismisses it after a 96dp threshold; shorter swipes snap back. The playlist pane remains visible independently.
 - Portrait bottom controls are title/artist → seek `Slider` + time labels → a centered row with the **play/pause `FilledIconButton` (80dp, largest)**, **prev/next (56dp)**, and smaller 40dp aux buttons (playlist toggle left; audio-only toggle right, only for video tracks; spacer otherwise to keep symmetry). Landscape uses the same actions with compact control sizes.
+
+### Compact track header (`ui/components/CompactTrackHeader.kt`)
+
+A reusable 44dp-art + title/artist row that matches the mini player's row styling, including a live `MpvSurface` preview when `hasVideo && !audioOnly` (matching the mini player). Used at the top of the playlist pane (portrait and landscape) to replace the large album art / title / artist in the main area when the playlist is visible. Receives the shared `Player` instance to render the video preview.
+
+### Shared transition gotcha
+
+`SharedTransitionLayout` wraps both the mini player and the full Now Playing in `EzmpvApp.kt`. Both `MiniPlayerBar` and `NowPlayingScreen` receive `SharedTransitionScope` + `AnimatedVisibilityScope` params. `sharedElement`/`sharedBounds` are extension functions on `SharedTransitionScope`, so call sites must be inside `with(sharedTransitionScope) { ... }`. The `AnimatedVisibility` scope extensions (`ColumnScope`/`RowScope`) conflict with `SharedTransitionScope` as an implicit receiver — use the fully-qualified `androidx.compose.animation.AnimatedVisibility(...)` or wrap in a `Box` to avoid the ambiguity.
 
 ### Animated play/pause icon (`ui/components/AnimatedPlayPauseIcon.kt`)
 
@@ -140,7 +150,7 @@ A VLC-style **path morph**: parses the VLC play/pause path strings once, lerps t
 
 ## Mini player
 
-`MiniPlayerBar` (`ui/screens/MiniPlayerBar.kt`) is pinned above the nav suite whenever the full player overlay is closed. When `hasVideo && !audioOnly`, the 44dp art area becomes a live `MpvSurface` (the shared `Player` renders into it); otherwise album art or a music-note icon. Row: art/video preview, title/artist, `AnimatedPlayPauseIcon`, next; a `LinearProgressIndicator` spans the top. Clicking it opens the full player overlay, and an upward swipe expands the bar upward with the controls at its top, opening the player after release past the 64dp threshold.
+`MiniPlayerBar` (`ui/screens/MiniPlayerBar.kt`) is pinned above the nav suite whenever the full player overlay is closed. When `hasVideo && !audioOnly`, the 44dp art area becomes a live `MpvSurface` (the shared `Player` renders into it); otherwise album art or a music-note icon. Row: art/video preview, title/artist, `AnimatedPlayPauseIcon`, next; a `LinearProgressIndicator` spans the top. Clicking it opens the full player overlay, and an upward swipe expands the bar upward with the controls at its top, opening the player after release past the 64dp threshold. The art area and container participate in the `SharedTransitionLayout` morph (keys `"player-art"` and `"player-container"`).
 
 ## Skills available in this repo
 

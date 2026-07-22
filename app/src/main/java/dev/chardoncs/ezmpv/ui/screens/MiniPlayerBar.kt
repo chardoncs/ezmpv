@@ -1,5 +1,8 @@
 package dev.chardoncs.ezmpv.ui.screens
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -36,10 +39,14 @@ import dev.chardoncs.ezmpv.player.PlayerController
 
 private const val MINI_PLAYER_EXPAND_THRESHOLD_DP = 64
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MiniPlayerBar(
     controller: PlayerController,
     onClick: () -> Unit,
+    onExpandProgress: (Float) -> Unit = {},
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
@@ -51,22 +58,27 @@ fun MiniPlayerBar(
     }
     val density = androidx.compose.ui.platform.LocalDensity.current
 
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .onSizeChanged { size ->
-                if (baseHeightPx == 0) baseHeightPx = size.height
-            }
-            .heightIn(
-                min = with(density) {
-                    (baseHeightPx.toFloat() - swipeOffset)
-                        .coerceAtLeast(baseHeightPx.toFloat())
-                        .toDp()
-                },
-            ),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 3.dp,
-    ) {
+    with(sharedTransitionScope) {
+        Surface(
+            modifier = modifier
+                .fillMaxWidth()
+                .onSizeChanged { size ->
+                    if (baseHeightPx == 0) baseHeightPx = size.height
+                }
+                .heightIn(
+                    min = with(density) {
+                        (baseHeightPx.toFloat() - swipeOffset)
+                            .coerceAtLeast(baseHeightPx.toFloat())
+                            .toDp()
+                    },
+                )
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "player-container"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                ),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            tonalElevation = 3.dp,
+        ) {
         Column {
             LinearProgressIndicator(
                 progress = {
@@ -85,6 +97,8 @@ fun MiniPlayerBar(
                                 if (dragAmount < 0f || swipeOffset < 0f) {
                                     change.consume()
                                     swipeOffset = (swipeOffset + dragAmount).coerceAtMost(0f)
+                                    val progress = (-swipeOffset / expandThreshold).coerceIn(0f, 1f)
+                                    onExpandProgress(progress)
                                 }
                             },
                             onDragEnd = {
@@ -93,9 +107,13 @@ fun MiniPlayerBar(
                                     onClick()
                                 } else {
                                     swipeOffset = 0f
+                                    onExpandProgress(0f)
                                 }
                             },
-                            onDragCancel = { swipeOffset = 0f },
+                            onDragCancel = {
+                                swipeOffset = 0f
+                                onExpandProgress(0f)
+                            },
                         )
                     }
                     .clickable(onClick = onClick)
@@ -106,20 +124,36 @@ fun MiniPlayerBar(
                 if (state.hasVideo && !state.audioOnly) {
                     dev.chardoncs.ezmpv.player.MpvSurface(
                         player = controller.player,
-                        modifier = Modifier.size(44.dp),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .sharedElement(
+                                sharedContentState = rememberSharedContentState(key = "player-art"),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                            ),
                     )
                 } else if (art != null) {
                     Image(
                         bitmap = art.asImageBitmap(),
                         contentDescription = "Album art",
-                        modifier = Modifier.size(44.dp),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .sharedElement(
+                                sharedContentState = rememberSharedContentState(key = "player-art"),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                            ),
                         contentScale = ContentScale.Crop,
                     )
                 } else {
                     Icon(
                         Icons.Filled.MusicNote,
                         contentDescription = null,
-                        modifier = Modifier.size(44.dp).padding(8.dp),
+                        modifier = Modifier
+                            .size(44.dp)
+                            .padding(8.dp)
+                            .sharedElement(
+                                sharedContentState = rememberSharedContentState(key = "player-art"),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                            ),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -156,5 +190,6 @@ fun MiniPlayerBar(
                 }
             }
         }
+    }
     }
 }

@@ -1,23 +1,26 @@
 package dev.chardoncs.ezmpv.ui.screens
 
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -62,11 +65,13 @@ import kotlin.time.Duration.Companion.milliseconds
 
 private const val LANDSCAPE_OVERLAY_TIMEOUT_MS = 4000L
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun NowPlayingScreen(
     controller: PlayerController,
     onBack: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
@@ -78,6 +83,8 @@ fun NowPlayingScreen(
             controller = controller,
             state = state,
             onBack = onBack,
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
             modifier = modifier,
         )
     } else {
@@ -85,53 +92,87 @@ fun NowPlayingScreen(
             controller = controller,
             state = state,
             onBack = onBack,
+            sharedTransitionScope = sharedTransitionScope,
+            animatedVisibilityScope = animatedVisibilityScope,
             modifier = modifier,
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun PortraitNowPlayingScreen(
     controller: PlayerController,
     state: PlayerState,
     onBack: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-    ) { innerPadding ->
+    with(sharedTransitionScope) {
+        Scaffold(
+            modifier = modifier
+                .fillMaxSize()
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "player-container"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                ),
+        ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = state.playlistVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                ) {
+                    dev.chardoncs.ezmpv.ui.components.CompactTrackHeader(
+                        state = state,
+                        player = controller.player,
+                        artSize = 44,
+                        horizontalPadding = 12,
+                        verticalPadding = 6,
+                    )
+                }
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(16.dp)
-                    .clip(RoundedCornerShape(16.dp)),
+                    .padding(if (state.playlistVisible) 0.dp else 16.dp)
+                    .clip(RoundedCornerShape(if (state.playlistVisible) 0.dp else 16.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                PlayerVisual(
-                    state = state,
-                    controller = controller,
-                )
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state.playlistVisible,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                    modifier = Modifier.fillMaxSize(),
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
+                if (!state.playlistVisible) {
+                    PlayerVisual(
+                        state = state,
+                        controller = controller,
+                        sharedTransitionScope = sharedTransitionScope,
+                        animatedVisibilityScope = animatedVisibilityScope,
+                    )
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = state.playlistVisible,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
                     ) {
-                        PlaylistOverlay(
-                            state = state,
-                            onSelect = controller::selectTrack,
-                        )
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                        ) {
+                            PlaylistOverlay(
+                                state = state,
+                                onSelect = controller::selectTrack,
+                            )
+                        }
                     }
                 }
             }
@@ -144,16 +185,21 @@ private fun PortraitNowPlayingScreen(
                 onPrevious = controller::previous,
                 onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
                 onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
+                showTrackInfo = !state.playlistVisible,
             )
+        }
         }
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun LandscapeNowPlayingScreen(
     controller: PlayerController,
     state: PlayerState,
     onBack: () -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
 ) {
     var controlsVisible by remember { mutableStateOf(true) }
@@ -168,11 +214,16 @@ private fun LandscapeNowPlayingScreen(
         }
     }
 
-    Row(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
-    ) {
+    with(sharedTransitionScope) {
+        Row(
+            modifier = modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+                .sharedBounds(
+                    sharedContentState = rememberSharedContentState(key = "player-container"),
+                    animatedVisibilityScope = animatedVisibilityScope,
+                ),
+        ) {
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -186,81 +237,86 @@ private fun LandscapeNowPlayingScreen(
                 PlayerVisual(
                     state = state,
                     controller = controller,
+                    sharedTransitionScope = sharedTransitionScope,
+                    animatedVisibilityScope = animatedVisibilityScope,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            androidx.compose.animation.AnimatedVisibility(
-                visible = controlsVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter),
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+            Box(modifier = Modifier.align(Alignment.TopCenter)) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
                 ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
                     ) {
-                        Text(
-                            text = state.playlist.getOrNull(state.currentIndex)?.title
-                                ?: "Now Playing",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        state.playlist.getOrNull(state.currentIndex)?.artist?.let { artist ->
+                        Column(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
                             Text(
-                                text = artist,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = state.playlist.getOrNull(state.currentIndex)?.title
+                                    ?: "Now Playing",
+                                style = MaterialTheme.typography.titleLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            state.playlist.getOrNull(state.currentIndex)?.artist?.let { artist ->
+                                Text(
+                                    text = artist,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                     }
                 }
             }
-            androidx.compose.animation.AnimatedVisibility(
-                visible = controlsVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopStart),
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.padding(8.dp),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
+            Box(modifier = Modifier.align(Alignment.TopStart)) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.padding(8.dp),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
                 }
             }
-            androidx.compose.animation.AnimatedVisibility(
-                visible = controlsVisible,
-                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
-                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
-                modifier = Modifier.align(Alignment.BottomCenter),
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
+            Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                    exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 }),
                 ) {
-                    Modifier.fillMaxWidth().NowPlayingControls(
-                        state = state,
-                        isVideoTrack = state.playlist.getOrNull(state.currentIndex)?.isVideo == true,
-                        onPlayPause = controller::togglePlayPause,
-                        onSeek = controller::seekTo,
-                        onNext = controller::next,
-                        onPrevious = controller::previous,
-                        onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
-                        onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.92f),
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ) {
+                        Modifier.fillMaxWidth().NowPlayingControls(
+                            state = state,
+                            isVideoTrack = state.playlist.getOrNull(state.currentIndex)?.isVideo == true,
+                            onPlayPause = controller::togglePlayPause,
+                            onSeek = controller::seekTo,
+                            onNext = controller::next,
+                            onPrevious = controller::previous,
+                            onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
+                            onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
                         compact = true,
                         showTrackInfo = false,
                     )
+                }
                 }
             }
         }
@@ -271,56 +327,97 @@ private fun LandscapeNowPlayingScreen(
                     .width(320.dp),
                 color = MaterialTheme.colorScheme.surfaceContainer,
             ) {
-                PlaylistOverlay(
-                    state = state,
-                    onSelect = controller::selectTrack,
-                )
+                Column(modifier = Modifier.fillMaxHeight()) {
+                    dev.chardoncs.ezmpv.ui.components.CompactTrackHeader(
+                        state = state,
+                        player = controller.player,
+                        artSize = 44,
+                        horizontalPadding = 12,
+                        verticalPadding = 6,
+                    )
+                    PlaylistOverlay(
+                        state = state,
+                        onSelect = controller::selectTrack,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
+        }
         }
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun PlayerVisual(
     state: PlayerState,
     controller: PlayerController,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
 ) {
-    if (state.hasVideo) {
-        MpvSurface(
-            player = controller.player,
-            modifier = modifier.fillMaxSize(),
-        )
-    } else {
-        AlbumArtOrPlaceholder(state = state, modifier = modifier)
+    with(sharedTransitionScope) {
+        if (state.hasVideo) {
+            MpvSurface(
+                player = controller.player,
+                modifier = modifier
+                    .fillMaxSize()
+                    .sharedElement(
+                        sharedContentState = rememberSharedContentState(key = "player-art"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                    ),
+            )
+        } else {
+            AlbumArtOrPlaceholder(
+                state = state,
+                modifier = modifier,
+                sharedTransitionScope = sharedTransitionScope,
+                animatedVisibilityScope = animatedVisibilityScope,
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun AlbumArtOrPlaceholder(
     state: PlayerState,
     modifier: Modifier = Modifier,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope,
 ) {
     val art = state.currentArt
-    if (art != null) {
-        Image(
-            bitmap = art.asImageBitmap(),
-            contentDescription = "Album art",
-            modifier = modifier.fillMaxSize(),
-            contentScale = ContentScale.Fit,
-        )
-    } else {
-        Surface(
-            modifier = modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(0.35f),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    with(sharedTransitionScope) {
+        if (art != null) {
+            Image(
+                bitmap = art.asImageBitmap(),
+                contentDescription = "Album art",
+                modifier = modifier
+                    .fillMaxSize()
+                    .sharedElement(
+                        sharedContentState = rememberSharedContentState(key = "player-art"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                    ),
+                contentScale = ContentScale.Fit,
+            )
+        } else {
+            Surface(
+                modifier = modifier
+                    .fillMaxSize()
+                    .sharedElement(
+                        sharedContentState = rememberSharedContentState(key = "player-art"),
+                        animatedVisibilityScope = animatedVisibilityScope,
+                    ),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize(0.35f),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

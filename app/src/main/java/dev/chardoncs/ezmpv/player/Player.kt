@@ -70,6 +70,7 @@ class Player(private val context: Context) {
             m.setOptionString("vo", "null")
             m.setOptionString("vid", "auto")
             m.setOptionString("aid", "auto")
+            m.setOptionString("keepaspect", "yes")
             m.setOptionString("idle", "yes")
             m.init()
             m.addObserver(observer)
