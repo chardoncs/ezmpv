@@ -328,13 +328,6 @@ private fun LandscapeNowPlayingScreen(
                 color = MaterialTheme.colorScheme.surfaceContainer,
             ) {
                 Column(modifier = Modifier.fillMaxHeight()) {
-                    dev.chardoncs.ezmpv.ui.components.CompactTrackHeader(
-                        state = state,
-                        player = controller.player,
-                        artSize = 44,
-                        horizontalPadding = 12,
-                        verticalPadding = 6,
-                    )
                     PlaylistOverlay(
                         state = state,
                         onSelect = controller::selectTrack,
