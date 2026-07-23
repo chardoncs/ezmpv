@@ -11,6 +11,7 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import dev.chardoncs.ezmpv.MainActivity
 import dev.chardoncs.ezmpv.EzmpvApplication
+import dev.chardoncs.ezmpv.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,12 +28,13 @@ class PlayerService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        setMediaNotificationProvider(
+        val notificationProvider =
             DefaultMediaNotificationProvider.Builder(this)
                 .setChannelId(CHANNEL_ID)
                 .setNotificationId(NOTIFICATION_ID)
                 .build()
-        )
+                .apply { setSmallIcon(R.drawable.ic_notification_small) }
+        setMediaNotificationProvider(notificationProvider)
         val controller = (application as EzmpvApplication).playerController
         controller.player.start()
         val a = MpvPlayerAdapter(controller, mainLooper)
@@ -76,7 +78,7 @@ class PlayerService : MediaSessionService() {
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("ezmpv")
             .setContentText("Playing media")
-            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setSmallIcon(R.drawable.ic_notification_small)
             .setCategory(Notification.CATEGORY_TRANSPORT)
             .setStyle(Notification.MediaStyle().setMediaSession(session.platformToken))
             .setOngoing(true)
