@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -77,10 +76,6 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
     var groupMenuOpen by remember { mutableStateOf(false) }
-
-    val grantLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocumentTree(),
-    ) { uri -> if (uri != null) controller.grantFolder(uri) }
 
     val pickLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -137,7 +132,7 @@ fun LibraryScreen(
                         }
                     }
                     IconButton(onClick = { menuOpen = true }) {
-                        Icon(Icons.Filled.MoreVert, contentDescription = "Folder options")
+                        Icon(Icons.Filled.MoreVert, contentDescription = "More")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                         if (showPickFile) {
@@ -146,29 +141,6 @@ fun LibraryScreen(
                                 onClick = {
                                     menuOpen = false
                                     pickLauncher.launch(arrayOf("video/*", "audio/*"))
-                                },
-                            )
-                        }
-                        DropdownMenuItem(
-                            text = { Text("Add folder…") },
-                            onClick = {
-                                menuOpen = false
-                                grantLauncher.launch(null)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Refresh") },
-                            onClick = {
-                                menuOpen = false
-                                controller.refreshPlaylist()
-                            },
-                        )
-                        state.selectedFolders.forEach { folder ->
-                            DropdownMenuItem(
-                                text = { Text("Remove: ${shortenPath(folder)}") },
-                                onClick = {
-                                    menuOpen = false
-                                    controller.revokeFolder(folder)
                                 },
                             )
                         }
@@ -182,7 +154,6 @@ fun LibraryScreen(
             tracks = tracks,
             viewMode = viewMode,
             groupBy = groupBy,
-            onGrant = { grantLauncher.launch(null) },
             onPlay = { libraryIndex ->
                 val selected = state.library.getOrNull(libraryIndex)
                 val selectedFolder = selected?.let { parentFolder(it.sourceUri) }
@@ -207,18 +178,17 @@ private fun LibraryBody(
     tracks: List<IndexedValue<MediaItem>>,
     viewMode: ViewMode,
     groupBy: GroupBy,
-    onGrant: () -> Unit,
     onPlay: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when {
-        state.selectedFolders.isEmpty() -> EmptyFolderState(onGrant, modifier)
+        state.selectedFolders.isEmpty() -> EmptyLibraryState(modifier)
         state.loading -> Box(modifier = modifier, contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
         tracks.isEmpty() -> Box(modifier = modifier.padding(24.dp), contentAlignment = Alignment.Center) {
             Text(
-                "No ${if (state.selectedFolders.isNotEmpty()) "matching" else ""} files found.",
+                "No matching files found.",
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
@@ -234,14 +204,18 @@ private fun LibraryBody(
 }
 
 @Composable
-private fun EmptyFolderState(onGrant: () -> Unit, modifier: Modifier) {
+private fun EmptyLibraryState(modifier: Modifier) {
     Column(
         modifier = modifier.padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
     ) {
-        Text("No folders selected.", style = MaterialTheme.typography.bodyMedium)
-        Button(onClick = onGrant) { Text("Add folder") }
+        Text("No bookmarks yet.", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "Add a folder from the Browse tab to populate the library.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -424,11 +398,6 @@ private fun parentFolder(uri: android.net.Uri): String {
     val seg = uri.lastPathSegment ?: return "Unknown location"
     val cut = seg.lastIndexOf('/')
     return if (cut > 0) seg.substring(0, cut) else seg
-}
-
-private fun shortenPath(uri: android.net.Uri): String {
-    val last = uri.lastPathSegment ?: uri.toString()
-    return last.substringAfterLast('/').ifBlank { last }
 }
 
 internal fun formatTime(ms: Long): String {

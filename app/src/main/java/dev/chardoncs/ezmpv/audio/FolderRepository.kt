@@ -15,37 +15,20 @@ class FolderRepository(private val context: Context) {
 
     private val metadataCache = MetadataCache(context)
 
-    fun grantedFolders(): List<Uri> =
-        context.contentResolver.persistedUriPermissions
-            .filter { it.isReadPermission && it.isWritePermission }
-            .map { it.uri }
-
-    fun grantFolder(uri: Uri) {
-        runCatching {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-        }.onFailure { Log.e(TAG, "grantFolder failed", it) }
-    }
-
-    fun revokeFolder(uri: Uri) {
-        runCatching {
-            context.contentResolver.releasePersistableUriPermission(
-                uri,
-                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                    android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-            )
-        }.onFailure { Log.e(TAG, "revokeFolder failed", it) }
-    }
-
     suspend fun scanMedia(folderUri: Uri): List<MediaItem> = withContext(Dispatchers.IO) {
         val tree = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
         if (!tree.isDirectory) return@withContext emptyList()
         val out = mutableListOf<MediaItem>()
-        collectMedia(tree, out)
+        collectMedia(tree, recursive = true, out)
         out.map { enrich(it) }
+    }
+
+    suspend fun listMedia(folderUri: Uri, recursive: Boolean): List<MediaItem> = withContext(Dispatchers.IO) {
+        val tree = DocumentFile.fromTreeUri(context, folderUri) ?: return@withContext emptyList()
+        if (!tree.isDirectory) return@withContext emptyList()
+        val out = mutableListOf<MediaItem>()
+        collectMedia(tree, recursive, out)
+        out
     }
 
     private suspend fun enrich(item: MediaItem): MediaItem {
@@ -55,10 +38,10 @@ class FolderRepository(private val context: Context) {
         return enriched
     }
 
-    private fun collectMedia(dir: DocumentFile, out: MutableList<MediaItem>) {
+    private fun collectMedia(dir: DocumentFile, recursive: Boolean, out: MutableList<MediaItem>) {
         dir.listFiles().forEach { doc ->
             when {
-                doc.isDirectory -> collectMedia(doc, out)
+                doc.isDirectory && recursive -> collectMedia(doc, recursive, out)
                 doc.isFile -> {
                     val mime = doc.type
                     val isVideo = mime?.startsWith("video/") == true

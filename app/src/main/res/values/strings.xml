@@ -4,4 +4,37 @@
     <string name="menu_video">Video</string>
     <string name="menu_browse">Browse</string>
     <string name="menu_more">More</string>
+
+    <string name="browse_bookmarks">Bookmarks</string>
+    <string name="browse_add_bookmark">Add bookmark</string>
+    <string name="browse_remove_bookmark">Remove bookmark</string>
+    <string name="browse_no_bookmarks">No bookmarks yet</string>
+    <string name="browse_play_all">Play all</string>
+    <string name="browse_add_to_bookmarks">Add to bookmarks</string>
+    <string name="browse_delete">Delete</string>
+    <string name="browse_delete_confirm">Delete %1$d item(s)?</string>
+    <string name="browse_deleted">Deleted</string>
+    <string name="browse_selection_count">%1$d selected</string>
+    <string name="browse_select_all">Select all</string>
+    <string name="browse_clear_selection">Clear selection</string>
+
+    <string name="bookmark_download">Download</string>
+    <string name="bookmark_movies">Movies</string>
+    <string name="bookmark_music">Music</string>
+    <string name="bookmark_podcasts">Podcasts</string>
+
+    <string name="browse_play_folder">Play this folder</string>
+    <string name="browse_play_folder_subfolders">Play folder and subfolders</string>
+    <string name="browse_play">Play</string>
+    <string name="browse_append">Append to queue</string>
+    <string name="browse_play_next">Play next</string>
+    <string name="browse_info">Info</string>
+    <string name="browse_empty_folder">This folder is empty</string>
+    <string name="browse_loading">Loading…</string>
+    <string name="browse_added_bookmark">Bookmark added</string>
+    <string name="browse_removed_bookmark">Bookmark removed</string>
+
+    <string name="cd_more_actions">More actions</string>
+    <string name="cd_bookmark_icon">Bookmark</string>
+    <string name="cd_back">Back</string>
 </resources>

@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import dev.chardoncs.ezmpv.audio.ArtCache
 import dev.chardoncs.ezmpv.audio.FileCopyCache
 import dev.chardoncs.ezmpv.audio.FolderRepository
+import dev.chardoncs.ezmpv.browse.BookmarkRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,7 +22,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class PlayerController(private val app: Context) {
+class PlayerController(private val app: Context, val bookmarks: BookmarkRepository) {
 
     private val folderRepo = FolderRepository(app)
     private val artCache = ArtCache(app)
@@ -43,7 +44,12 @@ class PlayerController(private val app: Context) {
     private var loadJob: Job? = null
 
     init {
-        _state.update { it.copy(selectedFolders = folderRepo.grantedFolders()) }
+        scope.launch {
+            bookmarks.bookmarks.collect { list ->
+                _state.update { it.copy(selectedFolders = list.map { b -> b.uri }) }
+                refreshPlaylist()
+            }
+        }
         scope.launch {
             player.state.collect { c ->
                 _state.update { ui ->
@@ -57,7 +63,6 @@ class PlayerController(private val app: Context) {
                 }
             }
         }
-        refreshPlaylist()
     }
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -67,27 +72,15 @@ class PlayerController(private val app: Context) {
         ContextCompat.startForegroundService(app, Intent(app, PlayerService::class.java))
     }
 
-    fun grantFolder(uri: Uri) {
-        folderRepo.grantFolder(uri)
-        _state.update { it.copy(selectedFolders = folderRepo.grantedFolders()) }
-        refreshPlaylist()
-    }
-
-    fun revokeFolder(uri: Uri) {
-        folderRepo.revokeFolder(uri)
-        _state.update { it.copy(selectedFolders = folderRepo.grantedFolders()) }
-        refreshPlaylist()
-    }
-
     fun refreshPlaylist() {
-        val folders = folderRepo.grantedFolders()
-        if (folders.isEmpty()) {
-            _state.update { it.copy(library = emptyList(), playlist = emptyList(), currentIndex = -1) }
-            player.setPlaylist(emptyList())
-            return
-        }
-        _state.update { it.copy(loading = true) }
         scope.launch {
+            val folders = _state.value.selectedFolders
+            if (folders.isEmpty()) {
+                _state.update { it.copy(library = emptyList(), playlist = emptyList(), currentIndex = -1) }
+                player.setPlaylist(emptyList())
+                return@launch
+            }
+            _state.update { it.copy(loading = true) }
             val items = folders.flatMap { folderRepo.scanMedia(it) }
             _state.update { it.copy(library = items, loading = false) }
         }
@@ -105,6 +98,48 @@ class PlayerController(private val app: Context) {
             player.setPlaylist(library)
             loadAndPlay(item, index)
         }
+    }
+
+    fun playDirectory(folderUri: Uri, recursive: Boolean, onQueued: () -> Unit = {}) {
+        ensureServiceStarted()
+        player.start()
+        loadJob?.cancel()
+        loadJob = scope.launch {
+            _state.update { it.copy(loading = true) }
+            val items = folderRepo.listMedia(folderUri, recursive)
+            if (items.isEmpty()) {
+                _state.update { it.copy(loading = false) }
+                return@launch
+            }
+            _state.update { it.copy(playlist = items, currentIndex = 0, loading = true) }
+            player.setPlaylist(items)
+            loadAndPlay(items[0], 0)
+            onQueued()
+        }
+    }
+
+    fun appendToQueue(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        ensureServiceStarted()
+        player.start()
+        val newPlaylist = _state.value.playlist + items
+        _state.update { it.copy(playlist = newPlaylist) }
+        player.setPlaylist(newPlaylist)
+    }
+
+    fun playNext(items: List<MediaItem>) {
+        if (items.isEmpty()) return
+        ensureServiceStarted()
+        player.start()
+        val current = _state.value
+        val idx = current.currentIndex
+        val newPlaylist = if (idx in current.playlist.indices) {
+            current.playlist.toMutableList().also { it.addAll(idx + 1, items) }
+        } else {
+            items
+        }
+        _state.update { it.copy(playlist = newPlaylist) }
+        player.setPlaylist(newPlaylist)
     }
 
     private suspend fun loadAndPlay(item: MediaItem, index: Int) {

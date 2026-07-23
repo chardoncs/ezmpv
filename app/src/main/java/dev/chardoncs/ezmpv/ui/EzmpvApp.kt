@@ -48,10 +48,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.chardoncs.ezmpv.EzmpvApplication
 import dev.chardoncs.ezmpv.ui.screens.AudioScreen
+import dev.chardoncs.ezmpv.ui.screens.BrowseScreen
+import dev.chardoncs.ezmpv.ui.screens.FileBrowserScreen
 import dev.chardoncs.ezmpv.ui.screens.MiniPlayerBar
 import dev.chardoncs.ezmpv.ui.screens.NowPlayingScreen
 import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
 import dev.chardoncs.ezmpv.ui.screens.VideoScreen
+import android.net.Uri
 import kotlin.math.roundToInt
 
 private const val PLAYER_ENTER_DURATION = 360
@@ -229,6 +232,16 @@ private fun EzmpvNavHost(
         startDestination = TopLevelDestination.BROWSE.route,
         modifier = modifier,
     ) {
+        composable(route = "file_browser/{treeUri}/{title}") { entry ->
+            val treeUri = Uri.parse(entry.arguments?.getString("treeUri"))
+            val title = entry.arguments?.getString("title") ?: "Folder"
+            FileBrowserScreen(
+                rootTreeUri = treeUri,
+                rootTitle = title,
+                onOpenPlayer = onOpenPlayer,
+                onExit = { navController.popBackStack() },
+            )
+        }
         TopLevelDestination.entries.forEach { destination ->
             composable(route = destination.route) {
                 when (destination) {
@@ -239,6 +252,11 @@ private fun EzmpvNavHost(
                     TopLevelDestination.AUDIO -> AudioScreen(
                         controller = controller,
                         onOpenPlayer = onOpenPlayer,
+                    )
+                    TopLevelDestination.BROWSE -> BrowseScreen(
+                        onOpenBrowser = { treeUri, title ->
+                            navController.navigate("file_browser/${Uri.encode(treeUri.toString())}/${Uri.encode(title)}")
+                        },
                     )
                     else -> PlaceholderScreen(destination = destination)
                 }

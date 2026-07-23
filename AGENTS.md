@@ -43,20 +43,28 @@ app/src/main/java/dev/chardoncs/ezmpv/
 │   ├── MpvPlayerAdapter.kt      # SimpleBasePlayer adapter → media3 (notification/lockscreen/BT)
 │   └── MpvSurface.kt            # MpvSurface (Compose AndroidView + SurfaceView); single shared Player
 ├── audio/
-│   ├── FolderRepository.kt      # SAF tree grants + DocumentFile scan → MediaItem; scan-time metadata enrichment
+│   ├── FolderRepository.kt      # SAF tree grants + DocumentFile scan → MediaItem; scan-time metadata enrichment; listMedia (non-recursive/recursive)
 │   ├── ArtCache.kt              # LruCache<Uri, Bitmap> + MediaMetadataRetriever extraction
 │   ├── FileCopyCache.kt         # LRU on-disk copy cache (content:// → filesDir for mpv)
 │   ├── MetadataCache.kt         # DataStore-backed JSON cache of enriched metadata (survives reboots)
 │   └── LibraryPreferences.kt    # DataStore-backed ViewMode + GroupBy prefs
+├── browse/
+│   ├── BrowseBookmark.kt        # @Serializable Bookmark(Uri + title + IconType) with UriSerializer
+│   ├── DirEntry.kt              # lightweight directory entry (uri, name, isDirectory, mime, size)
+│   ├── BookmarkRepository.kt    # DataStore JSON list of bookmarks (the library scan set)
+│   ├── StorageAccess.kt         # listDirectory + collectMedia (recursive) via DocumentFile
+│   └── BrowseController.kt      # app-singleton: bookmarks StateFlow; add/remove/toggle bookmark
 └── ui/
-    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 tabs) + MiniPlayerBar + player overlay (SharedTransitionLayout)
+    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 tabs + file_browser route) + MiniPlayerBar + player overlay (SharedTransitionLayout)
     ├── TopLevelDestination.kt  # enum: BROWSE (start), VIDEO, AUDIO, MORE
     ├── components/
     │   ├── AnimatedPlayPauseIcon.kt  # VLC-style path-morph play↔pause (Canvas, no XML drawables)
     │   └── CompactTrackHeader.kt     # reusable 44dp art+title/artist row (mini-player styling) used in playlist pane
     ├── screens/
-    │   ├── PlaceholderScreen.kt  # Browse/More placeholder
-    │   ├── LibraryScreen.kt     # shared Audio+Video browser: list/grid + group-by + folder menu + pick-file
+    │   ├── BrowseScreen.kt     # Browse tab: bookmarks list (with IconType icons) + add/remove bookmark
+    │   ├── FileBrowserScreen.kt  # file manager: in-screen dir back stack (rememberSaveable) + DirEntry list + per-item ModalBottomSheet (play folder / +subfolders / bookmark / append / play-next / info) + long-press multi-select (select all / play all / append / play-next / add-to-bookmarks / delete)
+    │   ├── PlaceholderScreen.kt  # More placeholder
+    │   ├── LibraryScreen.kt     # shared Audio+Video browser: list/grid + group-by + pick-file
     │   ├── AudioScreen.kt       # thin wrapper → LibraryScreen(AUDIO)
     │   ├── VideoScreen.kt       # thin wrapper → LibraryScreen(VIDEO, showPickFile)
     │   ├── MiniPlayerBar.kt     # mini player above nav; live video preview; shared-element morph to Now Playing
@@ -66,7 +74,7 @@ app/src/main/java/dev/chardoncs/ezmpv/
         └── Theme.kt              # EzmpvTheme (dynamic color on Android 12+, fallback scheme below)
 ```
 
-Four top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `NavigationBar` / side `NavigationRail`). The full player is an animated overlay above the tab content, not a navigation destination. Its open state is saveable across activity recreation, so orientation changes do not close it. A `MiniPlayerBar` is pinned above the nav suite whenever the full player is closed.
+Four top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `NavigationBar` / side `NavigationRail`). The full player is an animated overlay above the tab content, not a navigation destination. Its open state is saveable across activity recreation, so orientation changes do not close it. A `MiniPlayerBar` is pinned above the nav suite whenever the full player is closed. The NavHost also has a `file_browser/{treeUri}/{title}` route (URL-encoded args) reached from `BrowseScreen`; `FileBrowserScreen` keeps its own in-screen directory back stack (`rememberSaveable` `mutableStateListOf<Uri>` + parallel title list), so back navigation walks the directory tree first, then returns to the Browse tab.
 
 ## Key conventions
 
@@ -125,6 +133,7 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 - **`FolderRepository.scanMedia`** enriches every file at scan time: `MediaMetadataRetriever` extracts title/artist/album/year/duration, results cached in `MetadataCache` (DataStore JSON, keyed by URI + size) so re-scans skip already-enriched files and survive reboots. Recurses into subfolders (DFS over `DocumentFile.listFiles()`).
 - **`LibraryPreferences`** (DataStore) persists `ViewMode` (LIST/GRID) and `GroupBy` (Location/Artist/Album/Year).
 - **`LibraryScreen`** is shared by the Audio and Video tabs (thin wrappers in `AudioScreen.kt`/`VideoScreen.kt`). It filters `state.library` by media type, renders grouped `LazyColumn` rows or `LazyVerticalGrid` cards (adaptive 140dp), with a list/grid toggle and a group-by selector in the top bar. Tapping a track sets the files from that track's immediate subdirectory, in source order, as the play queue (`playFromLibrary`) and navigates to `now_playing`. The Video tab also exposes a "Pick file…" action for ad-hoc playback.
+- **Library scan set = bookmarks**: the Audio/Video library is the union of media scanned from every bookmarked folder in Browse. `PlayerController` collects `BookmarkRepository.bookmarks` and rescans `library` (recursive, enriched) whenever the bookmark list changes; `PlayerState.selectedFolders` mirrors the bookmark URIs. There is no separate folder-grant/scan-allowlist UI on the Library tab — adding a bookmark in Browse is the only way to feed the library.
 
 ## Now Playing UI
 
@@ -165,14 +174,14 @@ Load a skill with the `skill` tool before doing work it covers.
 
 ## Roadmap (not yet implemented)
 
-What's done: app shell, M3 dynamic theme, four-tab navigation, unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls, mini player (with live video preview) + persistent animated Now Playing overlay, portrait and landscape Now Playing layouts (including landscape right-side playlist, compact controls, auto-hiding overlays, and system-bar handling), screen-awake behavior for active foreground video playback, library browsers (Audio/Video tabs) with list/grid + group-by (Location/Artist/Album/Year) + scan-time metadata enrichment + DataStore cache, VLC-style animated play/pause icon.
+What's done: app shell, M3 dynamic theme, four-tab navigation, unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls, mini player (with live video preview) + persistent animated Now Playing overlay, portrait and landscape Now Playing layouts (including landscape right-side playlist, compact controls, auto-hiding overlays, and system-bar handling), screen-awake behavior for active foreground video playback, library browsers (Audio/Video tabs) with list/grid + group-by (Location/Artist/Album/Year) + scan-time metadata enrichment + DataStore cache, VLC-style animated play/pause icon, Browse tab with bookmarks (DataStore-persisted; add/remove via SAF OpenDocumentTree) + SAF file-browser (in-screen directory back stack, per-item context sheet: play folder / folder+subfolders / append / play-next / bookmark / info) + long-press multi-select (select all / play all / append / play-next / add-to-bookmarks / delete). The Audio/Video library is the union of media scanned from every bookmarked folder (Library tab has no folder-grant UI; adding a bookmark in Browse is the only way to feed the library).
 
 What's next (each is a separate iteration — don't try to do everything at once):
 
 1. **PiP for video** — picture-in-picture for the video player (background video continues in a floating window). Needs `supportsPictureInPicture` + `onUserLeaveHint`/`enterPictureInPictureMode` + `PlayerService` keeping the surface alive. Currently background video continues as audio-only (vo=null); PiP would keep video visible.
 2. **MediaController connection** — connect a Media3 `MediaController` from the UI so the session notification is fully managed by Media3 (currently we use a manual `startForeground` placeholder + Media3's notification when playing; a MediaController would unify this and enable Android Auto / system UI resume).
 3. **More screen** — settings (mpv options: `hwdec`, `vo`, `gpu-api`, `profile=gpu-hq`, subtitle prefs, etc.), about, licenses.
-4. **Settings persistence** — store `selectedFolders`, mpv option choices, recents, `audioOnly`, view-mode/group-by/filter, enriched metadata cache, etc. in `DataStore` so they survive reboots. `LibraryPreferences` and `MetadataCache` already use DataStore; extend to the rest.
+4. **Settings persistence** — store mpv option choices, recents, `audioOnly`, view-mode/group-by/filter, enriched metadata cache, etc. in `DataStore` so they survive reboots. `LibraryPreferences`, `MetadataCache`, and `BookmarkRepository` already use DataStore; extend to the rest.
 5. **Audio focus** — mpv doesn't handle Android audio focus; currently no ducking/pause-on-loss. Wire `AudioManager.requestAudioFocus` (or let Media3 manage it once a MediaController is connected).
 6. **Grid art thumbnails** — `LibraryScreen` grid cards currently show a music-note placeholder; load per-card art asynchronously from `ArtCache` (suspend) with a remembered LaunchedEffect.
 
