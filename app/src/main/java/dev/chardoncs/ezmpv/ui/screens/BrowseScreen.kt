@@ -51,7 +51,6 @@ import dev.chardoncs.ezmpv.EzmpvApplication
 import dev.chardoncs.ezmpv.R
 import dev.chardoncs.ezmpv.browse.BrowseBookmark
 import dev.chardoncs.ezmpv.browse.IconType
-import dev.chardoncs.ezmpv.browse.StorageAccess
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,9 +69,14 @@ fun BrowseScreen(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { uri ->
         if (uri != null) {
-            val title = StorageAccess.listDirectory(context, uri)
-                .firstOrNull()?.name
-                ?: uri.lastPathSegment?.substringAfterLast('/') ?: "Folder"
+            val flags = android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, flags)
+            }
+            val title = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, uri)?.name
+                ?: uri.lastPathSegment?.substringAfterLast(':')?.substringAfterLast('/')
+                ?: "Folder"
             controller.addBookmark(uri, title)
         }
     }
