@@ -9,6 +9,8 @@ data class MediaItem(
     val artist: String? = null,
     val album: String? = null,
     val year: Int? = null,
+    val discNumber: Int? = null,
+    val trackNumber: Int? = null,
     val durationMs: Long = 0L,
     val sizeBytes: Long = 0L,
     val mimeType: String? = null,

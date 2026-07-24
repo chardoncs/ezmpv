@@ -55,8 +55,8 @@ app/src/main/java/dev/chardoncs/ezmpv/
 │   ├── StorageAccess.kt         # listDirectory + collectMedia (recursive) via DocumentFile
 │   └── BrowseController.kt      # app-singleton: bookmarks StateFlow; add/remove/toggle bookmark
 └── ui/
-    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (4 tabs + file_browser route) + MiniPlayerBar + player overlay (SharedTransitionLayout)
-    ├── TopLevelDestination.kt  # enum: BROWSE (start), VIDEO, AUDIO, MORE
+    ├── EzmpvApp.kt              # NavigationSuiteScaffold + NavHost (3 tabs + file_browser route) + MiniPlayerBar + player overlay (SharedTransitionLayout)
+    ├── TopLevelDestination.kt  # enum: BROWSE (start), LIBRARY, MORE
     ├── components/
     │   ├── AnimatedPlayPauseIcon.kt  # VLC-style path-morph play↔pause (Canvas, no XML drawables)
     │   └── CompactTrackHeader.kt     # reusable 44dp art+title/artist row (mini-player styling) used in playlist pane
@@ -64,9 +64,9 @@ app/src/main/java/dev/chardoncs/ezmpv/
     │   ├── BrowseScreen.kt     # Browse tab: bookmarks list (with IconType icons) + add/remove bookmark
     │   ├── FileBrowserScreen.kt  # file manager: in-screen dir back stack (rememberSaveable) + DirEntry list + per-item ModalBottomSheet (play folder / +subfolders / bookmark / append / play-next / info) + long-press multi-select (select all / play all / append / play-next / add-to-bookmarks / delete)
     │   ├── PlaceholderScreen.kt  # More placeholder
-    │   ├── LibraryScreen.kt     # shared Audio+Video browser: list/grid + group-by + pick-file
-    │   ├── AudioScreen.kt       # thin wrapper → LibraryScreen(AUDIO)
-    │   ├── VideoScreen.kt       # thin wrapper → LibraryScreen(VIDEO, showPickFile)
+    │   ├── LibraryScreen.kt     # unified Library tab: in-screen back stack (Home→Section→DrillDown); Playlists placeholder + Video/Audio entry rows; per-section view-mode/group-by; artist/album directory cards w/ cover art; disc-aware album drill-down
+    │   ├── AudioScreen.kt       # (removed — merged into LibraryScreen)
+    │   ├── VideoScreen.kt       # (removed — merged into LibraryScreen)
     │   ├── MiniPlayerBar.kt     # mini player above nav; live video preview; shared-element morph to Now Playing
     │   └── NowPlayingScreen.kt  # full player: portrait/landscape media, playlist pane/overlay, shared-element morph
     └── theme/
@@ -74,7 +74,7 @@ app/src/main/java/dev/chardoncs/ezmpv/
         └── Theme.kt              # EzmpvTheme (dynamic color on Android 12+, fallback scheme below)
 ```
 
-Four top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `NavigationBar` / side `NavigationRail`). The full player is an animated overlay above the tab content, not a navigation destination. Its open state is saveable across activity recreation, so orientation changes do not close it. A `MiniPlayerBar` is pinned above the nav suite whenever the full player is closed. The NavHost also has a `file_browser/{treeUri}/{title}` route (URL-encoded args) reached from `BrowseScreen`; `FileBrowserScreen` keeps its own in-screen directory back stack (`rememberSaveable` `mutableStateListOf<Uri>` + parallel title list), so back navigation walks the directory tree first, then returns to the Browse tab.
+Three top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `NavigationBar` / side `NavigationRail`). The full player is an animated overlay above the tab content, not a navigation destination. Its open state is saveable across activity recreation, so orientation changes do not close it. A `MiniPlayerBar` is pinned above the nav suite whenever the full player is closed. The NavHost also has a `file_browser/{treeUri}/{title}` route (URL-encoded args) reached from `BrowseScreen`; `FileBrowserScreen` keeps its own in-screen directory back stack (`rememberSaveable` `mutableStateListOf<Uri>` + parallel title list), so back navigation walks the directory tree first, then returns to the Browse tab.
 
 ## Key conventions
 
@@ -130,10 +130,13 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 ## Library, metadata, and state
 
 - **`PlayerState`** carries `library` (the scanned, enriched catalog) separate from `playlist` (the current play queue). `playlistVisible` is `playlistUserOverride ?: false` (placeholder art means there's always something to show in Now Playing, so the playlist is closed by default).
-- **`FolderRepository.scanMedia`** enriches every file at scan time: `MediaMetadataRetriever` extracts title/artist/album/year/duration, results cached in `MetadataCache` (DataStore JSON, keyed by URI + size) so re-scans skip already-enriched files and survive reboots. Recurses into subfolders (DFS over `DocumentFile.listFiles()`).
-- **`LibraryPreferences`** (DataStore) persists `ViewMode` (LIST/GRID) and `GroupBy` (Location/Artist/Album/Year).
-- **`LibraryScreen`** is shared by the Audio and Video tabs (thin wrappers in `AudioScreen.kt`/`VideoScreen.kt`). It filters `state.library` by media type, renders grouped `LazyColumn` rows or `LazyVerticalGrid` cards (adaptive 140dp), with a list/grid toggle and a group-by selector in the top bar. Tapping a track sets the files from that track's immediate subdirectory, in source order, as the play queue (`playFromLibrary`) and navigates to `now_playing`. The Video tab also exposes a "Pick file…" action for ad-hoc playback.
-- **Library scan set = bookmarks**: the Audio/Video library is the union of media scanned from every bookmarked folder in Browse. `PlayerController` collects `BookmarkRepository.bookmarks` and rescans `library` (recursive, enriched) whenever the bookmark list changes; `PlayerState.selectedFolders` mirrors the bookmark URIs. There is no separate folder-grant/scan-allowlist UI on the Library tab — adding a bookmark in Browse is the only way to feed the library.
+- **`FolderRepository.scanMedia`** enriches every file at scan time: `MediaMetadataRetriever` extracts title/artist/album/year/duration/discNumber/trackNumber, results cached in `MetadataCache` (DataStore JSON, keyed by URI + size) so re-scans skip already-enriched files and survive reboots. Recurses into subfolders (DFS over `DocumentFile.listFiles()`).
+- **`LibraryPreferences`** (DataStore) persists per-type `ViewMode` (LIST/GRID) and `GroupBy` (Location/Artist/Album/Year) — separate keys for video and audio.
+- **`LibraryScreen`** is the single Library tab (replaces the former Audio and Video tabs). It uses an **in-screen back stack** (`rememberSaveable` `mutableStateListOf<LibraryScreen>` with a custom Saver, + `BackHandler`) with three levels: **Home** → **Section** (Video/Audio) → **DrillDown** (artist/album group). Home shows a Playlists placeholder ("Coming soon") and two entry rows (Video, Audio) that push the corresponding `Section` screen. A `Section` screen has its own inline toolbar (list/grid toggle + group-by dropdown) and renders the tracks; tapping an artist/album directory card pushes a `DrillDown`. The back button in the top app bar and the system back gesture pop the stack. Video and audio have independent, persistent view-mode and group-by (`LibraryPreferences` stores per-type keys: `video_view_mode`/`video_group_by`/`audio_view_mode`/`audio_group_by`; audio defaults to `ALBUM`/grid, video to `LOCATION`/list). Video supports only `LOCATION` and `YEAR` grouping; audio supports `LOCATION`/`ARTIST`/`ALBUM`/`YEAR`.
+  - For audio **artist** and **album** grouping, tracks are shown as **directory cards/rows** (one per group) using the cover art of the first audio file in the group (loaded asynchronously via `controller.getArt` → `ArtCache`), with a track count subtitle. Tapping a card pushes a `DrillDown` listing the group's tracks.
+  - The **album drill-down** is **disc-aware**: tracks are sorted by `discNumber` then `trackNumber` (extracted via `MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER`/`METADATA_KEY_CD_TRACK_NUMBER`, persisted in `MetadataCache`), grouped under "Disc 1"/"Disc 2"/… sub-headers (a single unknown-disc album shows "Tracks"). Playing from an album/artist drill-down queues the **group's tracks in disc→track order** via `playFromLibrary` (not the file-folder queueing used for `LOCATION`/`YEAR` grouping).
+  - The Home top app bar holds a "Pick file…" action (for ad-hoc video/audio playback) and pull-to-refresh rescans the library.
+- **Library scan set = bookmarks**: the Library's media catalog is the union of media scanned from every bookmarked folder in Browse. `PlayerController` collects `BookmarkRepository.bookmarks` and rescans `library` (recursive, enriched) whenever the bookmark list changes; `PlayerState.selectedFolders` mirrors the bookmark URIs. There is no separate folder-grant/scan-allowlist UI on the Library tab — adding a bookmark in Browse is the only way to feed the library.
 
 ## Now Playing UI
 
@@ -174,7 +177,7 @@ Load a skill with the `skill` tool before doing work it covers.
 
 ## Roadmap (not yet implemented)
 
-What's done: app shell, M3 dynamic theme, four-tab navigation, unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls, mini player (with live video preview) + persistent animated Now Playing overlay, portrait and landscape Now Playing layouts (including landscape right-side playlist, compact controls, auto-hiding overlays, and system-bar handling), screen-awake behavior for active foreground video playback, library browsers (Audio/Video tabs) with list/grid + group-by (Location/Artist/Album/Year) + scan-time metadata enrichment + DataStore cache, VLC-style animated play/pause icon, Browse tab with bookmarks (DataStore-persisted; add/remove via SAF OpenDocumentTree) + SAF file-browser (in-screen directory back stack, per-item context sheet: play folder / folder+subfolders / append / play-next / bookmark / info) + long-press multi-select (select all / play all / append / play-next / add-to-bookmarks / delete). The Audio/Video library is the union of media scanned from every bookmarked folder (Library tab has no folder-grant UI; adding a bookmark in Browse is the only way to feed the library).
+What's done: app shell, M3 dynamic theme, three-tab navigation (Browse / Library / More), unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls, mini player (with live video preview) + persistent animated Now Playing overlay, portrait and landscape Now Playing layouts (including landscape right-side playlist, compact controls, auto-hiding overlays, and system-bar handling), screen-awake behavior for active foreground video playback, unified Library tab (Playlists placeholder + Video + Audio sections with per-section persistent list/grid + group-by; audio artist/album shown as directory cards with cover art; disc-aware album drill-down) with scan-time metadata enrichment (incl. disc/track number) + DataStore cache, VLC-style animated play/pause icon, Browse tab with bookmarks (DataStore-persisted; add/remove via SAF OpenDocumentTree) + SAF file-browser (in-screen directory back stack, per-item context sheet: play folder / folder+subfolders / append / play-next / bookmark / info) + long-press multi-select (select all / play all / append / play-next / add-to-bookmarks / delete). The Library is the union of media scanned from every bookmarked folder (Library tab has no folder-grant UI; adding a bookmark in Browse is the only way to feed the library).
 
 What's next (each is a separate iteration — don't try to do everything at once):
 
@@ -183,7 +186,7 @@ What's next (each is a separate iteration — don't try to do everything at once
 3. **More screen** — settings (mpv options: `hwdec`, `vo`, `gpu-api`, `profile=gpu-hq`, subtitle prefs, etc.), about, licenses.
 4. **Settings persistence** — store mpv option choices, recents, `audioOnly`, view-mode/group-by/filter, enriched metadata cache, etc. in `DataStore` so they survive reboots. `LibraryPreferences`, `MetadataCache`, and `BookmarkRepository` already use DataStore; extend to the rest.
 5. **Audio focus** — mpv doesn't handle Android audio focus; currently no ducking/pause-on-loss. Wire `AudioManager.requestAudioFocus` (or let Media3 manage it once a MediaController is connected).
-6. **Grid art thumbnails** — `LibraryScreen` grid cards currently show a music-note placeholder; load per-card art asynchronously from `ArtCache` (suspend) with a remembered LaunchedEffect.
+6. **Grid art thumbnails for video/non-directory cards** — `LibraryScreen`'s video grid cards and non-directory audio cards still show a music-note placeholder; load per-card art asynchronously from `ArtCache` (suspend) with a remembered LaunchedEffect. (Audio artist/album directory cards and the album drill-down already load cover art.)
 
 ## Things to avoid
 

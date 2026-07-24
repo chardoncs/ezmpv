@@ -77,12 +77,20 @@ class FolderRepository(private val context: Context) {
                 ?.toIntOrNull()
                 ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE)
                     ?.take(4)?.toIntOrNull()
+            val discNumber = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DISC_NUMBER)
+                ?.substringBefore('/')
+                ?.trim()?.toIntOrNull()
+            val trackNumber = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)
+                ?.substringBefore('/')
+                ?.trim()?.toIntOrNull()
             item.copy(
                 title = title,
                 artist = artist,
                 album = album,
                 durationMs = durationMs,
                 year = year,
+                discNumber = discNumber,
+                trackNumber = trackNumber,
             )
         } catch (t: Throwable) {
             Log.w(TAG, "metadata extraction failed for ${item.sourceUri}", t)

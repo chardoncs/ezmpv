@@ -47,13 +47,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.chardoncs.ezmpv.EzmpvApplication
-import dev.chardoncs.ezmpv.ui.screens.AudioScreen
 import dev.chardoncs.ezmpv.ui.screens.BrowseScreen
 import dev.chardoncs.ezmpv.ui.screens.FileBrowserScreen
+import dev.chardoncs.ezmpv.ui.screens.LibraryScreen
 import dev.chardoncs.ezmpv.ui.screens.MiniPlayerBar
 import dev.chardoncs.ezmpv.ui.screens.NowPlayingScreen
 import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
-import dev.chardoncs.ezmpv.ui.screens.VideoScreen
 import android.net.Uri
 import kotlin.math.roundToInt
 
@@ -245,11 +244,7 @@ private fun EzmpvNavHost(
         TopLevelDestination.entries.forEach { destination ->
             composable(route = destination.route) {
                 when (destination) {
-                    TopLevelDestination.VIDEO -> VideoScreen(
-                        controller = controller,
-                        onOpenPlayer = onOpenPlayer,
-                    )
-                    TopLevelDestination.AUDIO -> AudioScreen(
+                    TopLevelDestination.LIBRARY -> LibraryScreen(
                         controller = controller,
                         onOpenPlayer = onOpenPlayer,
                     )

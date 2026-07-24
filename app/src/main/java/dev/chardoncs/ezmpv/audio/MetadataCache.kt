@@ -19,6 +19,8 @@ private data class StoredMetadata(
     val artist: String? = null,
     val album: String? = null,
     val year: Int? = null,
+    val discNumber: Int? = null,
+    val trackNumber: Int? = null,
     val durationMs: Long = 0L,
 )
 
@@ -29,12 +31,22 @@ class MetadataCache(private val context: Context) {
         val prefs = context.metadataStore.data.first()
         val raw = prefs[key] ?: return null
         return runCatching { json.decodeFromString<StoredMetadata>(raw) }.getOrNull()
-            ?.let { item.copy(title = it.title, artist = it.artist, album = it.album, year = it.year, durationMs = it.durationMs) }
+            ?.let {
+                item.copy(
+                    title = it.title,
+                    artist = it.artist,
+                    album = it.album,
+                    year = it.year,
+                    discNumber = it.discNumber,
+                    trackNumber = it.trackNumber,
+                    durationMs = it.durationMs,
+                )
+            }
     }
 
     suspend fun put(item: MediaItem) {
         val key = stringPreferencesKey(keyFor(item))
-        val stored = StoredMetadata(item.title, item.artist, item.album, item.year, item.durationMs)
+        val stored = StoredMetadata(item.title, item.artist, item.album, item.year, item.discNumber, item.trackNumber, item.durationMs)
         context.metadataStore.edit { it[key] = json.encodeToString(StoredMetadata.serializer(), stored) }
     }
 
