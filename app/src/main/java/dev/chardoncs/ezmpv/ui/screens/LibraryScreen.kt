@@ -36,6 +36,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -149,26 +151,34 @@ fun LibraryScreen(
             )
         },
     ) { innerPadding ->
-        LibraryBody(
-            state = state,
-            tracks = tracks,
-            viewMode = viewMode,
-            groupBy = groupBy,
-            onPlay = { libraryIndex ->
-                val selected = state.library.getOrNull(libraryIndex)
-                val selectedFolder = selected?.let { parentFolder(it.sourceUri) }
-                val queue = tracks
-                    .map { it.value }
-                    .filter { item ->
-                        selectedFolder == null || parentFolder(item.sourceUri) == selectedFolder
-                    }
-                val posInQueue = queue.indexOfFirst { it.sourceUri == selected?.sourceUri }
-                    .coerceAtLeast(0)
-                controller.playFromLibrary(queue, posInQueue)
-                onOpenPlayer()
-            },
+        val pullState = rememberPullToRefreshState()
+        PullToRefreshBox(
+            isRefreshing = state.loading,
+            onRefresh = { controller.refreshPlaylist() },
+            state = pullState,
             modifier = Modifier.fillMaxSize().padding(innerPadding),
-        )
+        ) {
+            LibraryBody(
+                state = state,
+                tracks = tracks,
+                viewMode = viewMode,
+                groupBy = groupBy,
+                onPlay = { libraryIndex ->
+                    val selected = state.library.getOrNull(libraryIndex)
+                    val selectedFolder = selected?.let { parentFolder(it.sourceUri) }
+                    val queue = tracks
+                        .map { it.value }
+                        .filter { item ->
+                            selectedFolder == null || parentFolder(item.sourceUri) == selectedFolder
+                        }
+                    val posInQueue = queue.indexOfFirst { it.sourceUri == selected?.sourceUri }
+                        .coerceAtLeast(0)
+                    controller.playFromLibrary(queue, posInQueue)
+                    onOpenPlayer()
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 

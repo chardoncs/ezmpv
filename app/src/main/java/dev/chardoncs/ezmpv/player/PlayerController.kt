@@ -75,13 +75,8 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
     fun refreshPlaylist() {
         scope.launch {
             val folders = _state.value.selectedFolders
-            if (folders.isEmpty()) {
-                _state.update { it.copy(library = emptyList(), playlist = emptyList(), currentIndex = -1) }
-                player.setPlaylist(emptyList())
-                return@launch
-            }
             _state.update { it.copy(loading = true) }
-            val items = folders.flatMap { folderRepo.scanMedia(it) }
+            val items = if (folders.isEmpty()) emptyList() else folders.flatMap { folderRepo.scanMedia(it) }
             _state.update { it.copy(library = items, loading = false) }
         }
     }
