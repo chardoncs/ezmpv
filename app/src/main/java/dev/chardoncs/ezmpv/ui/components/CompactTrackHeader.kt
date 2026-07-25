@@ -18,14 +18,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.chardoncs.ezmpv.player.MpvSurface
-import dev.chardoncs.ezmpv.player.Player
 import dev.chardoncs.ezmpv.player.PlayerState
 
 @Composable
 fun CompactTrackHeader(
     state: PlayerState,
-    player: Player,
     modifier: Modifier = Modifier,
     artSize: Int = 44,
     horizontalPadding: Int = 12,
@@ -39,28 +36,21 @@ fun CompactTrackHeader(
             .padding(horizontal = horizontalPadding.dp, vertical = verticalPadding.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (state.hasVideo && !state.audioOnly) {
-            MpvSurface(
-                player = player,
+        val bitmap = state.currentArt
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Album art",
                 modifier = Modifier.size(artSize.dp),
+                contentScale = ContentScale.Crop,
             )
         } else {
-            val bitmap = state.currentArt
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = "Album art",
-                    modifier = Modifier.size(artSize.dp),
-                    contentScale = ContentScale.Crop,
-                )
-            } else {
-                Icon(
-                    Icons.Filled.MusicNote,
-                    contentDescription = null,
-                    modifier = Modifier.size(artSize.dp).padding(8.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Icon(
+                Icons.Filled.MusicNote,
+                contentDescription = null,
+                modifier = Modifier.size(artSize.dp).padding(8.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         Column(
             modifier = Modifier

@@ -53,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +63,8 @@ import kotlinx.coroutines.delay
 import dev.chardoncs.ezmpv.player.MpvSurface
 import dev.chardoncs.ezmpv.player.PlayerController
 import dev.chardoncs.ezmpv.player.PlayerState
+import dev.chardoncs.ezmpv.player.VideoSurfaceHost
+import dev.chardoncs.ezmpv.player.VideoTarget
 import dev.chardoncs.ezmpv.player.playlistVisible
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -72,6 +75,7 @@ private val LANDSCAPE_PLAYLIST_WIDTH = 320.dp
 @Composable
 fun NowPlayingScreen(
     controller: PlayerController,
+    videoHost: VideoSurfaceHost,
     onBack: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
@@ -95,6 +99,7 @@ fun NowPlayingScreen(
     if (isLandscape) {
         LandscapeNowPlayingScreen(
             controller = controller,
+            videoHost = videoHost,
             state = state,
             onBack = onBack,
             sharedTransitionScope = sharedTransitionScope,
@@ -104,6 +109,7 @@ fun NowPlayingScreen(
     } else {
         PortraitNowPlayingScreen(
             controller = controller,
+            videoHost = videoHost,
             state = state,
             onBack = onBack,
             sharedTransitionScope = sharedTransitionScope,
@@ -117,6 +123,7 @@ fun NowPlayingScreen(
 @Composable
 private fun PortraitNowPlayingScreen(
     controller: PlayerController,
+    videoHost: VideoSurfaceHost,
     state: PlayerState,
     onBack: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
@@ -131,6 +138,7 @@ private fun PortraitNowPlayingScreen(
                     sharedContentState = rememberSharedContentState(key = "player-container"),
                     animatedVisibilityScope = animatedVisibilityScope,
                 ),
+            containerColor = Color.Transparent,
         ) { innerPadding ->
         Column(
             modifier = Modifier
@@ -149,7 +157,6 @@ private fun PortraitNowPlayingScreen(
                 ) {
                     dev.chardoncs.ezmpv.ui.components.CompactTrackHeader(
                         state = state,
-                        player = controller.player,
                         artSize = 44,
                         horizontalPadding = 12,
                         verticalPadding = 6,
@@ -167,7 +174,7 @@ private fun PortraitNowPlayingScreen(
                 if (!state.playlistVisible) {
                     PlayerVisual(
                         state = state,
-                        controller = controller,
+                        videoHost = videoHost,
                         sharedTransitionScope = sharedTransitionScope,
                         animatedVisibilityScope = animatedVisibilityScope,
                     )
@@ -210,6 +217,7 @@ private fun PortraitNowPlayingScreen(
 @Composable
 private fun LandscapeNowPlayingScreen(
     controller: PlayerController,
+    videoHost: VideoSurfaceHost,
     state: PlayerState,
     onBack: () -> Unit,
     sharedTransitionScope: SharedTransitionScope,
@@ -232,7 +240,6 @@ private fun LandscapeNowPlayingScreen(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
                 .sharedBounds(
                     sharedContentState = rememberSharedContentState(key = "player-container"),
                     animatedVisibilityScope = animatedVisibilityScope,
@@ -245,7 +252,7 @@ private fun LandscapeNowPlayingScreen(
         ) {
             PlayerVisual(
                 state = state,
-                controller = controller,
+                videoHost = videoHost,
                 sharedTransitionScope = sharedTransitionScope,
                 animatedVisibilityScope = animatedVisibilityScope,
                 modifier = Modifier.fillMaxSize(),
@@ -357,7 +364,7 @@ private fun LandscapeNowPlayingScreen(
 @Composable
 private fun PlayerVisual(
     state: PlayerState,
-    controller: PlayerController,
+    videoHost: VideoSurfaceHost,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
@@ -365,7 +372,8 @@ private fun PlayerVisual(
     with(sharedTransitionScope) {
         if (state.hasVideo) {
             MpvSurface(
-                player = controller.player,
+                host = videoHost,
+                target = VideoTarget.FULL,
                 modifier = modifier
                     .fillMaxSize()
                     .sharedElement(
@@ -505,6 +513,7 @@ private fun Modifier.NowPlayingControls(
             Text(
                 text = track?.title ?: "No track selected",
                 style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

@@ -9,12 +9,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.adaptive.navigationsuite.NavigationSuiteScaffold
 import androidx.compose.runtime.Composable
@@ -28,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -47,6 +50,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import dev.chardoncs.ezmpv.EzmpvApplication
+import dev.chardoncs.ezmpv.player.PersistentMpvSurface
+import dev.chardoncs.ezmpv.player.VideoTarget
+import dev.chardoncs.ezmpv.player.rememberVideoSurfaceHost
 import dev.chardoncs.ezmpv.ui.screens.BrowseScreen
 import dev.chardoncs.ezmpv.ui.screens.FileBrowserScreen
 import dev.chardoncs.ezmpv.ui.screens.LibraryScreen
@@ -68,6 +74,7 @@ fun EzmpvApp() {
     val controller = remember {
         (context.applicationContext as EzmpvApplication).playerController
     }
+    val videoHost = rememberVideoSurfaceHost(controller.player)
     val state by controller.state.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -77,6 +84,11 @@ fun EzmpvApp() {
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val view = LocalView.current
     val hasTrack = state.playlist.isNotEmpty() && state.currentIndex >= 0
+    val videoTarget = if (state.hasVideo && !state.audioOnly) {
+        if (playerOpen) VideoTarget.FULL else VideoTarget.MINI
+    } else {
+        null
+    }
     val hideSystemBars = playerOpen && isLandscape
     var swipeOffset by remember { mutableFloatStateOf(0f) }
     val swipeThreshold = with(LocalDensity.current) {
@@ -152,6 +164,7 @@ fun EzmpvApp() {
                         ) {
                             Modifier.MiniPlayerBar(
                                 controller = controller,
+                                videoHost = videoHost,
                                 onClick = { playerOpen = true },
                                 sharedTransitionScope = sharedScope,
                                 animatedVisibilityScope = this,
@@ -161,11 +174,24 @@ fun EzmpvApp() {
                 }
             }
 
+            AnimatedVisibility(
+                visible = playerOpen,
+                enter = fadeIn(tween(PLAYER_ENTER_DURATION)),
+                exit = fadeOut(tween(PLAYER_EXIT_DURATION)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface),
+                )
+            }
+
             if (hasTrack) {
                 AnimatedVisibility(
                     visible = playerOpen,
                     modifier = Modifier
                         .fillMaxSize()
+                        .zIndex(1f)
                         .offset { IntOffset(0, swipeOffset.roundToInt()) }
                         .graphicsLayer {
                             alpha = 1f - (swipeOffset / size.height).coerceIn(0f, 0.35f)
@@ -205,6 +231,7 @@ fun EzmpvApp() {
                 ) {
                     NowPlayingScreen(
                         controller = controller,
+                        videoHost = videoHost,
                         onBack = { playerOpen = false },
                         sharedTransitionScope = sharedScope,
                         animatedVisibilityScope = this,
@@ -212,6 +239,11 @@ fun EzmpvApp() {
                     )
                 }
             }
+            PersistentMpvSurface(
+                host = videoHost,
+                target = videoTarget,
+                modifier = Modifier.fillMaxSize().zIndex(0.5f),
+            )
         }
     }
 

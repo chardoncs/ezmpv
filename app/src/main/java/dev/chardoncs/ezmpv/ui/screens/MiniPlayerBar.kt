@@ -36,6 +36,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chardoncs.ezmpv.player.PlayerController
+import dev.chardoncs.ezmpv.player.VideoSurfaceHost
+import dev.chardoncs.ezmpv.player.VideoTarget
 
 private const val MINI_PLAYER_EXPAND_THRESHOLD_DP = 64
 
@@ -43,6 +45,7 @@ private const val MINI_PLAYER_EXPAND_THRESHOLD_DP = 64
 @Composable
 fun Modifier.MiniPlayerBar(
     controller: PlayerController,
+    videoHost: VideoSurfaceHost,
     onClick: () -> Unit,
     onExpandProgress: (Float) -> Unit = {},
     sharedTransitionScope: SharedTransitionScope,
@@ -122,7 +125,8 @@ fun Modifier.MiniPlayerBar(
                 val art = state.currentArt
                 if (state.hasVideo && !state.audioOnly) {
                     dev.chardoncs.ezmpv.player.MpvSurface(
-                        player = controller.player,
+                        host = videoHost,
+                        target = VideoTarget.MINI,
                         modifier = Modifier
                             .size(44.dp)
                             .sharedElement(

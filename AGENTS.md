@@ -35,13 +35,13 @@ app/src/main/java/dev/chardoncs/ezmpv/
 ├── EzmpvApplication.kt          # Application; owns the singleton PlayerController (lazy)
 ├── MainActivity.kt              # ComponentActivity; requests POST_NOTIFICATIONS at runtime
 ├── player/
-│   ├── Player.kt                # MPVLib wrapper; single shared instance; vo=null until a surface attaches
+│   ├── Player.kt                # MPVLib wrapper; single shared instance; owns persistent SurfaceTexture/Surface; vo=null until first video display
 │   ├── PlayerState.kt           # PlayerState (library + playlist + playback), playlistVisible
 │   ├── MediaItem.kt             # MediaItem (audio + video; isVideo, year)
 │   ├── PlayerController.kt       # app-singleton: owns Player + FolderRepo + ArtCache + CopyCache; all playback logic
 │   ├── PlayerService.kt         # MediaSessionService; holds MediaSession + MpvPlayerAdapter; foreground notification
 │   ├── MpvPlayerAdapter.kt      # SimpleBasePlayer adapter → media3 (notification/lockscreen/BT)
-│   └── MpvSurface.kt            # MpvSurface (Compose AndroidView + SurfaceView); single shared Player
+│   └── MpvSurface.kt            # one persistent root TextureView host + Compose mini/full bounds publishers
 ├── audio/
 │   ├── FolderRepository.kt      # SAF tree grants + DocumentFile scan → MediaItem; scan-time metadata enrichment; listMedia (non-recursive/recursive)
 │   ├── ArtCache.kt              # LruCache<Uri, Bitmap> + MediaMetadataRetriever extraction
@@ -85,12 +85,12 @@ Three top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `N
 
 ## Architecture: unified player + service + mini player
 
-There is **one shared `Player`** (MPVLib instance) for the whole app, owned by `PlayerController` (an app-singleton in `EzmpvApplication`). A single `Surface` is reparented between the mini player and the full Now Playing screen as the user navigates — mpv is never recreated.
+There is **one shared `Player`** (MPVLib instance) for the whole app, owned by `PlayerController` (an app-singleton in `EzmpvApplication`). A single persistent `TextureView` stays attached at the root of `EzmpvApp`; its bounds move between the mini player and Now Playing screen as the user navigates — mpv is never recreated.
 
 - **`PlayerController`** (`player/PlayerController.kt`) — owns `Player`, `FolderRepository`, `ArtCache`, `FileCopyCache`, `MetadataCache`. Exposes `state: StateFlow<PlayerState>` and the methods UI calls (`selectTrack`, `playFromLibrary`, `playAdhoc`, `next`, `previous`, `togglePlayPause`, `seekTo`, `setAudioOnly`, `setPlaylistUserOverride`, folder grant/revoke/refresh). `ensureServiceStarted()` does `startForegroundService(PlayerService)`. Playback works without any UI attached (background).
 - **`PlayerService`** (`player/PlayerService.kt`) — `MediaSessionService`. `onCreate` starts mpv, builds `MpvPlayerAdapter`, creates and registers the `MediaSession`, collects `controller.state` on Main, and calls `adapter.refresh()` (= `invalidateState()`). The initial foreground notification is `Notification.MediaStyle`-backed with the platform session token; Media3's default provider subsequently publishes the metadata-driven notification. `onTaskRemoved` always releases the controller, removes the foreground notification, and stops the service so swiping the app from recents stops playback.
 - **`MpvPlayerAdapter`** (`player/MpvPlayerAdapter.kt`) — `@UnstableApi SimpleBasePlayer`. `getState()` builds a `State` from `controller.state` (playlist as `MediaItemData`, `playWhenReady`, `STATE_READY`/`STATE_IDLE`, position via `PositionSupplier`). It must advertise both playback commands and read commands (`COMMAND_GET_CURRENT_MEDIA_ITEM`, `COMMAND_GET_TIMELINE`, and `COMMAND_GET_METADATA`); without the read commands Media3's notification manager sees an empty timeline or null metadata and removes the media notification. Handlers: `handleSetPlayWhenReady`, `handleSeek` (next/prev/seek → `controller`), `handleStop`, `handleRelease`. Available controls are play/pause, previous, next, stop, and seek-to-media-item. **Do not call `setIsLoading` in `STATE_IDLE`/`STATE_ENDED`** — media3 throws `IllegalArgumentException: isLoading only allowed when not in STATE_IDLE or STATE_ENDED`. The `loading` flag in `PlayerState` is library-scan progress, not playback buffering; don't map it to media3 `isLoading`.
-- **UI** never owns a `Player`. `EzmpvApp` grabs `PlayerController` from the Application; screens receive it as a param and collect `controller.state`. `MpvSurface(player = controller.player, ...)` attaches/detaches the shared surface. `EzmpvApp` keeps the display awake only while the visible full player is actively playing a non-audio-only video, and hides the system bars while that player is open in landscape.
+- **UI** never owns a `Player`. `EzmpvApp` grabs `PlayerController` from the Application; screens receive it as a param and collect `controller.state`. `PersistentMpvSurface` owns the single root `TextureView`; `MpvSurface` only publishes the mini/full target bounds through `VideoSurfaceHost`. `EzmpvApp` keeps the display awake only while the visible full player is actively playing a non-audio-only video, and hides the system bars while that player is open in landscape.
 
 ### Media3 system media controls
 
@@ -105,19 +105,18 @@ The `dev.jdtech.mpv:libmpv` AAR (v1.0.0) is an instance-based MIT-licensed fork 
 - `command(arrayOf("loadfile", path))` plays a file.
 - Property observers: `addObserver(EventObserver)` + `observeProperty(name, format)`; log observers: `addLogObserver(LogObserver)`.
 
-### Start mpv with `vo=null` and only switch to `vo=gpu` once a surface is attached
+### Persistent video surface (SurfaceTexture + TextureView)
 
-`Player.start()` initializes mpv with `vo=null`, `force-window=no`, `vid=auto`, `keepaspect=yes`, `keep-open=yes`, `idle=yes`. `keep-open=yes` keeps the last file loaded (paused at end) after EOF so play/seek still work after the playlist finishes — `Player.playPause()` restarts a finished track by seeking to 0 before unpausing, and `seekTo`/`playPause` reset the `playbackEnded`/`eofHandled` flags so a later EOF re-triggers auto-advance. Without keep-open, mpv unloads the file and goes idle at the end of the last track, leaving play/pause and seek dead. A file can be `loadfile`'d safely with no surface attached — mpv decodes video to the null output and plays audio. `keepaspect=yes` ensures video preserves its aspect ratio when the surface resizes (e.g. when the landscape playlist pane shrinks the video area). When a `Surface` arrives (`attachSurface`), it calls **`m.attachSurface(s)` first, then `m.setPropertyString("vo", "gpu")`** — the order matters: setting `vo=gpu` before the surface pointer (`wid`) is set causes `vo/gpu/android: fatal: Missing surface pointer` and the video output fails (audio-only playback, no graphics). Same ordering applies in `setAudioOnly(false)`.
+mpv renders into a **single persistent `Surface` backed by a `SurfaceTexture` that `Player` owns** (`Player.acquireVideoTexture()`), not into a view's surface. `PersistentMpvSurface` creates the only `TextureView` and calls `setSurfaceTexture` exactly once; mini/full `MpvSurface`s are transparent target-bound publishers, not Android views. A `SurfaceTexture` must be detached from every GL context before `TextureView.setSurfaceTexture`, so it cannot be handed between views during a shared transition. Keeping one view attached is what preserves video across rotation (the manifest has `android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"` on `MainActivity`), mini↔full player morphs, and audio-only toggles. Do not reintroduce per-view `TextureView`, `SurfaceView`, or `attachSurface`/`detachSurface` calls.
 
-### The surface-attach race (gotcha — read this before touching `MpvSurface.kt`)
+- `Player.start()` still initializes mpv with `vo=null` so audio can play with no UI; `ensureVideoOutput()` attaches the persistent surface and switches to `vo=gpu` exactly once (attach first, then `vo=gpu` — the reverse order fatals with "Missing surface pointer"), both when mpv starts after the texture exists and vice versa.
+- `VideoSurfaceHost` tracks the mini and full bounds. `PersistentMpvSurface` is the only code that calls `player.resizeVideoSurface(w, h)` → `SurfaceTexture.setDefaultBufferSize` and mpv's `android-surface-size` property, so inactive/overlapping targets cannot resize the active output. `keepaspect=yes` preserves the aspect ratio.
+- The root `TextureView` must remain in composition for the whole app lifetime. Never call `setSurfaceTexture` a second time to move between mini/full targets.
+- `Player.stop()` releases the persistent `Surface`/`SurfaceTexture`; the next `acquireVideoTexture()` recreates them.
 
-`SurfaceHolder.Callback.surfaceCreated` can fire **before** `MPVLib` has been created, so `player.isCreated` is still `false` at that moment and `attachSurface` cannot be called. `surfaceCreated` does NOT fire again on its own.
+### `keep-open=yes` and EOF
 
-**Fix in place:** `MpvSurface` tracks the current `SurfaceHolder` in a `mutableStateOf`, and a `LaunchedEffect(player.isCreated, currentHolder)` attaches the surface when **both** become non-null — covering both "surface first, mpv later" and "mpv first, surface later" orderings. Do not remove this `LaunchedEffect` thinking it's redundant; it's load-bearing.
-
-### Stale-surface detach guard (for the mini↔full reparenting)
-
-Because the single `Player`/surface is reparented between the mini player and Now Playing, a disposing surface (e.g. the mini one) could otherwise call `detachSurface` and tear down the *new* full-screen surface. `Player.detachSurface(Surface)` ignores the call when the passed `Surface` is not the currently-attached one (identity compare). `MpvSurface.surfaceDestroyed` passes `holder.surface` so the guard can compare. The no-arg `Player.detachSurface()` is kept for safety. Do not change `MpvSurface.surfaceDestroyed` to call the no-arg version.
+`keep-open=yes` keeps the last file loaded (paused at end) after EOF so play/seek still work after the playlist finishes — `Player.playPause()` restarts a finished track by seeking to 0 before unpausing, and `seekTo`/`playPause` reset the `playbackEnded`/`eofHandled` flags so a later EOF re-triggers auto-advance. Without keep-open, mpv unloads the file and goes idle at the end of the last track, leaving play/pause and seek dead.
 
 ### mpv can't open Android `content://` or `android.resource://` URIs
 
@@ -125,7 +124,7 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 
 ### Audio-only mode for video (runtime toggle)
 
-`Player.setAudioOnly(Boolean)` toggles at runtime by detaching the surface and flipping `vid`/`vo`/`force-window` to null — this backs the "audio-only mode for video" feature without recreating the `MPVLib` instance. `setAudioOnly(false)` only switches back to `vo=gpu` when a `surface` is present (otherwise it would set `vo=gpu` with no surface → crash). Don't call `attachSurface` while `audioOnly=true`; `Player` already guards against it.
+`Player.setAudioOnly(Boolean)` toggles at runtime by flipping `vid` between `no` and `auto` — the persistent surface and `vo=gpu` stay attached, so toggling is near-instant with no VO teardown. `MainActivity.onStart/onStop` call `PlayerController.setVideoDecodeEnabled` to pause video decoding (`vid=no`) while the app is backgrounded, preserving the old "background = audio-only decode" battery behavior.
 
 ## Library, metadata, and state
 
@@ -150,7 +149,7 @@ mpv's stream layer has no protocol handler for these Android framework schemes �
 
 ### Compact track header (`ui/components/CompactTrackHeader.kt`)
 
-A reusable 44dp-art + title/artist row that matches the mini player's row styling, including a live `MpvSurface` preview when `hasVideo && !audioOnly` (matching the mini player). Used at the top of the playlist pane (portrait and landscape) to replace the large album art / title / artist in the main area when the playlist is visible. Receives the shared `Player` instance to render the video preview.
+A reusable 44dp-art + title/artist row that matches the mini player's row styling. Used at the top of the playlist pane (portrait and landscape) to replace the large album art / title / artist in the main area when the playlist is visible. It uses embedded art or the music-note placeholder because the single persistent video view remains on the active mini/full target.
 
 ### Shared transition gotcha
 
@@ -181,7 +180,7 @@ What's done: app shell, M3 dynamic theme, three-tab navigation (Browse / Library
 
 What's next (each is a separate iteration — don't try to do everything at once):
 
-1. **PiP for video** — picture-in-picture for the video player (background video continues in a floating window). Needs `supportsPictureInPicture` + `onUserLeaveHint`/`enterPictureInPictureMode` + `PlayerService` keeping the surface alive. Currently background video continues as audio-only (vo=null); PiP would keep video visible.
+1. **PiP for video** — picture-in-picture for the video player (background video continues in a floating window). Needs `supportsPictureInPicture` + `onUserLeaveHint`/`enterPictureInPictureMode` + `PlayerService` keeping the surface alive. Currently background video pauses video decoding (`vid=no`, audio continues); PiP would keep video visible.
 2. **MediaController connection** — connect a Media3 `MediaController` from the UI so the session notification is fully managed by Media3 (currently we use a manual `startForeground` placeholder + Media3's notification when playing; a MediaController would unify this and enable Android Auto / system UI resume).
 3. **More screen** — settings (mpv options: `hwdec`, `vo`, `gpu-api`, `profile=gpu-hq`, subtitle prefs, etc.), about, licenses.
 4. **Settings persistence** — store mpv option choices, recents, `audioOnly`, view-mode/group-by/filter, enriched metadata cache, etc. in `DataStore` so they survive reboots. `LibraryPreferences`, `MetadataCache`, and `BookmarkRepository` already use DataStore; extend to the rest.

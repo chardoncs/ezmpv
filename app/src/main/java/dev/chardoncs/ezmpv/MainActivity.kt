@@ -31,4 +31,14 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        (application as EzmpvApplication).playerController.setVideoDecodeEnabled(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        (application as EzmpvApplication).playerController.setVideoDecodeEnabled(false)
+    }
 }

@@ -50,11 +50,13 @@ class PlayerService : MediaSessionService() {
             )
             .build()
         mediaSession = session
-        startForeground(
-            NOTIFICATION_ID,
-            buildMediaNotification(session),
-            android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
-        )
+        runCatching {
+            startForeground(
+                NOTIFICATION_ID,
+                buildMediaNotification(session),
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+            )
+        }
         addSession(session)
         scope.launch {
             controller.state.collect { a.refresh() }

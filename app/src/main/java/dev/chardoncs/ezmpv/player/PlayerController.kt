@@ -234,6 +234,8 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
         _state.update { it.copy(playlistUserOverride = visible) }
     }
 
+    fun setVideoDecodeEnabled(enabled: Boolean) = player.setVideoDecodeEnabled(enabled)
+
     fun release() {
         player.stop()
         scope.cancel()

@@ -1,6 +1,7 @@
 package dev.chardoncs.ezmpv.player
 
 import android.content.Context
+import android.graphics.SurfaceTexture
 import android.util.Log
 import android.view.Surface
 import dev.jdtech.mpv.MPVLib
@@ -19,8 +20,10 @@ class Player(private val context: Context) {
     private var eofHandled = false
     private var playbackEnded = false
     private var awaitingFileLoaded = false
-    private var surface: Surface? = null
-    private var hasSurfaceAttached = false
+    private var surfaceTexture: SurfaceTexture? = null
+    private var videoSurface: Surface? = null
+    private var voAttached = false
+    private var videoDecodeEnabled = true
 
     private var mpv: MPVLib? = null
     private val observer = object : MPVLib.EventObserver {
@@ -81,6 +84,7 @@ class Player(private val context: Context) {
             m.observeProperty("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_FLAG)
             mpv = m
             Log.i(TAG, "player started")
+            ensureVideoOutput()
         } catch (t: Throwable) {
             Log.e(TAG, "init failed", t)
             runCatching { m.destroy() }
@@ -88,8 +92,11 @@ class Player(private val context: Context) {
     }
 
     fun stop() {
-        surface = null
-        hasSurfaceAttached = false
+        runCatching { videoSurface?.release() }
+        runCatching { surfaceTexture?.release() }
+        videoSurface = null
+        surfaceTexture = null
+        voAttached = false
         mpv?.let { m ->
             runCatching { m.removeObserver(observer) }
             runCatching { m.destroy() }
@@ -149,57 +156,48 @@ class Player(private val context: Context) {
         val m = mpv ?: return
         _state.update { it.copy(audioOnly = audioOnly) }
         if (audioOnly) {
-            if (hasSurfaceAttached) {
-                m.detachSurface()
-                hasSurfaceAttached = false
-            }
             m.setPropertyString("vid", "no")
-            m.setPropertyString("vo", "null")
-            m.setPropertyString("force-window", "no")
         } else {
-            if (surface != null) {
-                surface?.let {
-                    m.attachSurface(it)
-                    hasSurfaceAttached = true
-                }
-                m.setPropertyString("vo", "gpu")
-                m.setPropertyString("vid", "auto")
-                m.setPropertyString("force-window", "auto")
-            }
+            ensureVideoOutput()
+            if (voAttached && videoDecodeEnabled) m.setPropertyString("vid", "auto")
         }
     }
 
-    fun attachSurface(s: Surface) {
+    fun setVideoDecodeEnabled(enabled: Boolean) {
+        videoDecodeEnabled = enabled
         val m = mpv ?: return
-        surface = s
-        if (!_state.value.audioOnly) {
-            m.attachSurface(s)
-            m.setPropertyString("vo", "gpu")
-            m.setPropertyString("vid", "auto")
-            m.setOptionString("force-window", "yes")
-            hasSurfaceAttached = true
-        }
+        if (_state.value.audioOnly || !voAttached) return
+        m.setPropertyString("vid", if (enabled) "auto" else "no")
     }
 
-    fun detachSurface() {
-        val s = surface
-        if (s != null) detachSurface(s) else doDetachSurface()
+    fun acquireVideoTexture(): SurfaceTexture {
+        surfaceTexture?.takeUnless { it.isReleased }?.let { return it }
+        runCatching { videoSurface?.release() }
+        val st = SurfaceTexture(0)
+        runCatching { st.detachFromGLContext() }
+        st.setDefaultBufferSize(1280, 720)
+        surfaceTexture = st
+        videoSurface = Surface(st)
+        voAttached = false
+        ensureVideoOutput()
+        return st
     }
 
-    fun detachSurface(s: Surface) {
-        if (s !== surface) return
-        doDetachSurface()
+    fun resizeVideoSurface(width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        surfaceTexture?.setDefaultBufferSize(width, height)
+        mpv?.let { runCatching { it.setPropertyString("android-surface-size", "${width}x$height") } }
     }
 
-    private fun doDetachSurface() {
+    private fun ensureVideoOutput() {
         val m = mpv ?: return
-        if (hasSurfaceAttached) {
-            m.setPropertyString("vo", "null")
-            m.setPropertyString("force-window", "no")
-            m.detachSurface()
-            hasSurfaceAttached = false
-        }
-        surface = null
+        val s = videoSurface ?: return
+        if (voAttached || _state.value.audioOnly) return
+        m.attachSurface(s)
+        m.setPropertyString("vo", "gpu")
+        m.setPropertyString("vid", if (videoDecodeEnabled) "auto" else "no")
+        m.setPropertyString("force-window", "yes")
+        voAttached = true
     }
 
     private fun handleEndFile() {
