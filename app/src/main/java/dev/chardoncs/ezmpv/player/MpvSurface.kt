@@ -1,5 +1,6 @@
 package dev.chardoncs.ezmpv.player
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.SurfaceTexture
 import android.view.TextureView
@@ -83,6 +84,7 @@ fun PersistentMpvSurface(
     )
 }
 
+@SuppressLint("ViewConstructor")
 private class VideoSurfaceContainer(context: Context, private val player: Player) : FrameLayout(context) {
     private val textureView = TextureView(context).apply {
         isClickable = false
