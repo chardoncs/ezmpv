@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -81,13 +82,14 @@ fun NowPlayingScreen(
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
     val configuration = LocalConfiguration.current
+    val windowInfo = LocalWindowInfo.current
     val isLandscape = configuration.orientation ==
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     LaunchedEffect(isLandscape, state.playlistVisible, state.hasVideo) {
         if (state.hasVideo) {
             val ratio = if (isLandscape && state.playlistVisible) {
-                val screenWidthDp = configuration.screenWidthDp
+                val screenWidthDp = windowInfo.containerSize.width
                 if (screenWidthDp > 0) LANDSCAPE_PLAYLIST_WIDTH.value / screenWidthDp else 0f
             } else 0f
             controller.player.setVideoRightMarginRatio(ratio)
