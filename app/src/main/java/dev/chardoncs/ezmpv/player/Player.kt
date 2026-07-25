@@ -71,6 +71,7 @@ class Player(private val context: Context) {
             m.setOptionString("vid", "auto")
             m.setOptionString("aid", "auto")
             m.setOptionString("keepaspect", "yes")
+            m.setOptionString("keep-open", "yes")
             m.setOptionString("idle", "yes")
             m.init()
             m.addObserver(observer)
@@ -123,11 +124,17 @@ class Player(private val context: Context) {
     fun playPause() {
         val m = mpv ?: return
         val paused = m.getPropertyBoolean("pause") ?: false
-        if (paused) playbackEnded = false
+        if (paused) {
+            if (playbackEnded) m.command(arrayOf("seek", "0", "absolute"))
+            playbackEnded = false
+            eofHandled = false
+        }
         m.setPropertyBoolean("pause", !paused)
     }
 
     fun seekTo(ms: Long) {
+        playbackEnded = false
+        eofHandled = false
         val seconds = ms / 1000.0
         mpv?.command(arrayOf("seek", "%.3f".format(seconds), "absolute"))
         _state.update { it.copy(positionMs = ms) }
