@@ -52,6 +52,7 @@ import androidx.navigation.compose.rememberNavController
 import dev.chardoncs.ezmpv.EzmpvApplication
 import dev.chardoncs.ezmpv.player.PersistentMpvSurface
 import dev.chardoncs.ezmpv.player.VideoTarget
+import dev.chardoncs.ezmpv.player.playlistVisible
 import dev.chardoncs.ezmpv.player.rememberVideoSurfaceHost
 import dev.chardoncs.ezmpv.ui.screens.BrowseScreen
 import dev.chardoncs.ezmpv.ui.screens.FileBrowserScreen
@@ -85,7 +86,11 @@ fun EzmpvApp() {
     val view = LocalView.current
     val hasTrack = state.playlist.isNotEmpty() && state.currentIndex >= 0
     val videoTarget = if (state.hasVideo && !state.audioOnly) {
-        if (playerOpen) VideoTarget.FULL else VideoTarget.MINI
+        when {
+            !playerOpen -> VideoTarget.MINI
+            !isLandscape && state.playlistVisible -> VideoTarget.HEADER
+            else -> VideoTarget.FULL
+        }
     } else {
         null
     }
@@ -242,7 +247,9 @@ fun EzmpvApp() {
             PersistentMpvSurface(
                 host = videoHost,
                 target = videoTarget,
-                modifier = Modifier.fillMaxSize().zIndex(0.5f),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(if (videoTarget == VideoTarget.HEADER) 1.5f else 0.5f),
             )
         }
     }

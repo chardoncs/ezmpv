@@ -24,6 +24,7 @@ import kotlin.math.roundToInt
 enum class VideoTarget {
     MINI,
     FULL,
+    HEADER,
 }
 
 @Stable
@@ -78,7 +79,7 @@ fun PersistentMpvSurface(
     AndroidView(
         modifier = modifier,
         factory = { context -> VideoSurfaceContainer(context, host.player) },
-        update = { container -> container.update(targetBounds ?: previousBounds) },
+        update = { container -> container.update(if (target == null) null else targetBounds ?: previousBounds) },
     )
 }
 

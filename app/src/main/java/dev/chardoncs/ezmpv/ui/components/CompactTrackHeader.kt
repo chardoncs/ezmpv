@@ -18,11 +18,15 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.chardoncs.ezmpv.player.MpvSurface
 import dev.chardoncs.ezmpv.player.PlayerState
+import dev.chardoncs.ezmpv.player.VideoSurfaceHost
+import dev.chardoncs.ezmpv.player.VideoTarget
 
 @Composable
 fun CompactTrackHeader(
     state: PlayerState,
+    videoHost: VideoSurfaceHost,
     modifier: Modifier = Modifier,
     artSize: Int = 44,
     horizontalPadding: Int = 12,
@@ -36,21 +40,29 @@ fun CompactTrackHeader(
             .padding(horizontal = horizontalPadding.dp, vertical = verticalPadding.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val bitmap = state.currentArt
-        if (bitmap != null) {
+        if (state.hasVideo && !state.audioOnly) {
+            MpvSurface(
+                host = videoHost,
+                target = VideoTarget.HEADER,
+                modifier = Modifier.size(artSize.dp),
+            )
+        } else {
+            val bitmap = state.currentArt
+            if (bitmap != null) {
             Image(
                 bitmap = bitmap.asImageBitmap(),
                 contentDescription = "Album art",
                 modifier = Modifier.size(artSize.dp),
                 contentScale = ContentScale.Crop,
             )
-        } else {
-            Icon(
-                Icons.Filled.MusicNote,
-                contentDescription = null,
-                modifier = Modifier.size(artSize.dp).padding(8.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            } else {
+                Icon(
+                    Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    modifier = Modifier.size(artSize.dp).padding(8.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         Column(
             modifier = Modifier

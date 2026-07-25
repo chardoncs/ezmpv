@@ -157,6 +157,7 @@ private fun PortraitNowPlayingScreen(
                 ) {
                     dev.chardoncs.ezmpv.ui.components.CompactTrackHeader(
                         state = state,
+                        videoHost = videoHost,
                         artSize = 44,
                         horizontalPadding = 12,
                         verticalPadding = 6,

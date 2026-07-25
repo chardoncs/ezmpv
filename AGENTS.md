@@ -149,7 +149,7 @@ mpv's stream layer has no protocol handler for these Android framework schemes â
 
 ### Compact track header (`ui/components/CompactTrackHeader.kt`)
 
-A reusable 44dp-art + title/artist row that matches the mini player's row styling. Used at the top of the playlist pane (portrait and landscape) to replace the large album art / title / artist in the main area when the playlist is visible. It uses embedded art or the music-note placeholder because the single persistent video view remains on the active mini/full target.
+A reusable 44dp-art + title/artist row that matches the mini player's row styling. Used at the top of the playlist pane (portrait and landscape) to replace the large album art / title / artist in the main area when the playlist is visible. In portrait, it publishes the persistent view's `HEADER` target for video tracks; otherwise it uses embedded art or the music-note placeholder.
 
 ### Shared transition gotcha
 
