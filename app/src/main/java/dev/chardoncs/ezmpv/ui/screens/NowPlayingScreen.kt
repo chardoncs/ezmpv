@@ -542,8 +542,16 @@ private fun Modifier.NowPlayingControls(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(formatTime(posMs), style = MaterialTheme.typography.labelLarge)
-            Text(formatTime(durMs), style = MaterialTheme.typography.labelLarge)
+            Text(
+                text = formatTime(posMs),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = formatTime(durMs),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         Row(
