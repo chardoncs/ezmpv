@@ -111,6 +111,7 @@ private val LibraryScreenSaver = androidx.compose.runtime.saveable.Saver<android
 fun LibraryScreen(
     controller: PlayerController,
     onOpenPlayer: () -> Unit,
+    playerOpen: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -151,7 +152,7 @@ fun LibraryScreen(
         backStack.removeAt(backStack.lastIndex)
         return true
     }
-    BackHandler(enabled = backStack.size > 1) { pop() }
+    BackHandler(enabled = !playerOpen && backStack.size > 1) { pop() }
 
     val title = when (current) {
         is LibraryScreen.Home -> "Library"

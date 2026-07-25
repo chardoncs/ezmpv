@@ -75,6 +75,7 @@ fun FileBrowserScreen(
     rootTitle: String,
     onOpenPlayer: () -> Unit,
     onExit: () -> Unit,
+    playerOpen: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -108,7 +109,7 @@ fun FileBrowserScreen(
 
     val inSelection = selection.isNotEmpty()
     val atRoot = stack.size == 1
-    BackHandler(enabled = !atRoot || inSelection) {
+    BackHandler(enabled = !playerOpen && (!atRoot || inSelection)) {
         if (inSelection) {
             selection.clear()
         } else {

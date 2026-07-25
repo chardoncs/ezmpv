@@ -159,6 +159,7 @@ fun EzmpvApp() {
                         navController = navController,
                         controller = controller,
                         onOpenPlayer = { playerOpen = true },
+                        playerOpen = playerOpen,
                         modifier = Modifier.weight(1f),
                     )
                     if (hasTrack) {
@@ -264,6 +265,7 @@ private fun EzmpvNavHost(
     navController: NavHostController,
     controller: dev.chardoncs.ezmpv.player.PlayerController,
     onOpenPlayer: () -> Unit,
+    playerOpen: Boolean,
     modifier: Modifier = Modifier,
 ) {
     NavHost(
@@ -279,6 +281,7 @@ private fun EzmpvNavHost(
                 rootTitle = title,
                 onOpenPlayer = onOpenPlayer,
                 onExit = { navController.popBackStack() },
+                playerOpen = playerOpen,
             )
         }
         TopLevelDestination.entries.forEach { destination ->
@@ -287,6 +290,7 @@ private fun EzmpvNavHost(
                     TopLevelDestination.LIBRARY -> LibraryScreen(
                         controller = controller,
                         onOpenPlayer = onOpenPlayer,
+                        playerOpen = playerOpen,
                     )
                     TopLevelDestination.BROWSE -> BrowseScreen(
                         onOpenBrowser = { treeUri, title ->
