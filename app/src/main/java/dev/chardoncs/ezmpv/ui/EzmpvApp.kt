@@ -54,6 +54,7 @@ import dev.chardoncs.ezmpv.ui.screens.MiniPlayerBar
 import dev.chardoncs.ezmpv.ui.screens.NowPlayingScreen
 import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
 import android.net.Uri
+import androidx.compose.runtime.mutableFloatStateOf
 import kotlin.math.roundToInt
 
 private const val PLAYER_ENTER_DURATION = 360
@@ -77,7 +78,7 @@ fun EzmpvApp() {
     val view = LocalView.current
     val hasTrack = state.playlist.isNotEmpty() && state.currentIndex >= 0
     val hideSystemBars = playerOpen && isLandscape
-    var swipeOffset by remember { mutableStateOf(0f) }
+    var swipeOffset by remember { mutableFloatStateOf(0f) }
     val swipeThreshold = with(LocalDensity.current) {
         PLAYER_DISMISS_THRESHOLD_DP.dp.toPx()
     }
