@@ -43,6 +43,6 @@
     <string name="about_title">About</string>
     <string name="about_app_name">ezmpv</string>
     <string name="about_version">Version %1$s</string>
-    <string name="about_copyright">Copyright (c) 2026 Charles Dong</string>
+    <string name="about_copyright">Copyright © 2026 Charles Dong</string>
     <string name="about_license">Licensed under the GNU General Public License 3.0.</string>
 </resources>
