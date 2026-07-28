@@ -54,12 +54,14 @@ import dev.chardoncs.ezmpv.player.PersistentMpvSurface
 import dev.chardoncs.ezmpv.player.VideoTarget
 import dev.chardoncs.ezmpv.player.playlistVisible
 import dev.chardoncs.ezmpv.player.rememberVideoSurfaceHost
+import dev.chardoncs.ezmpv.ui.screens.AboutScreen
 import dev.chardoncs.ezmpv.ui.screens.BrowseScreen
 import dev.chardoncs.ezmpv.ui.screens.FileBrowserScreen
 import dev.chardoncs.ezmpv.ui.screens.LibraryScreen
 import dev.chardoncs.ezmpv.ui.screens.MiniPlayerBar
+import dev.chardoncs.ezmpv.ui.screens.MoreScreen
 import dev.chardoncs.ezmpv.ui.screens.NowPlayingScreen
-import dev.chardoncs.ezmpv.ui.screens.PlaceholderScreen
+import dev.chardoncs.ezmpv.ui.screens.SettingsScreen
 import android.net.Uri
 import androidx.compose.runtime.mutableFloatStateOf
 import kotlin.math.roundToInt
@@ -284,6 +286,12 @@ private fun EzmpvNavHost(
                 playerOpen = playerOpen,
             )
         }
+        composable(route = "settings") {
+            SettingsScreen(onBack = { navController.popBackStack() })
+        }
+        composable(route = "about") {
+            AboutScreen(onBack = { navController.popBackStack() })
+        }
         TopLevelDestination.entries.forEach { destination ->
             composable(route = destination.route) {
                 when (destination) {
@@ -297,7 +305,10 @@ private fun EzmpvNavHost(
                             navController.navigate("file_browser/${Uri.encode(treeUri.toString())}/${Uri.encode(title)}")
                         },
                     )
-                    else -> PlaceholderScreen(destination = destination)
+                    TopLevelDestination.MORE -> MoreScreen(
+                        onOpenSettings = { navController.navigate("settings") },
+                        onOpenAbout = { navController.navigate("about") },
+                    )
                 }
             }
         }
