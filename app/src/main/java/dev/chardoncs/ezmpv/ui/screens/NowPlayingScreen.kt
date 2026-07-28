@@ -28,7 +28,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -37,10 +41,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -54,17 +61,22 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import dev.chardoncs.ezmpv.EzmpvApplication
+import dev.chardoncs.ezmpv.R
 import dev.chardoncs.ezmpv.player.MpvSurface
 import dev.chardoncs.ezmpv.player.PlayerController
 import dev.chardoncs.ezmpv.player.PlayerState
 import dev.chardoncs.ezmpv.player.VideoSurfaceHost
 import dev.chardoncs.ezmpv.player.VideoTarget
 import dev.chardoncs.ezmpv.player.playlistVisible
+import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val LANDSCAPE_OVERLAY_TIMEOUT_MS = 4000L
@@ -81,6 +93,11 @@ fun NowPlayingScreen(
     modifier: Modifier = Modifier,
 ) {
     val state by controller.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val playlistController = remember {
+        (context.applicationContext as EzmpvApplication).playlistController
+    }
+    val playlists by playlistController.playlists.collectAsStateWithLifecycle()
     val configuration = LocalConfiguration.current
     val windowInfo = LocalWindowInfo.current
     val isLandscape = configuration.orientation ==
@@ -99,6 +116,8 @@ fun NowPlayingScreen(
     if (isLandscape) {
         LandscapeNowPlayingScreen(
             controller = controller,
+            playlistController = playlistController,
+            playlists = playlists,
             videoHost = videoHost,
             state = state,
             onBack = onBack,
@@ -109,6 +128,8 @@ fun NowPlayingScreen(
     } else {
         PortraitNowPlayingScreen(
             controller = controller,
+            playlistController = playlistController,
+            playlists = playlists,
             videoHost = videoHost,
             state = state,
             onBack = onBack,
@@ -123,6 +144,8 @@ fun NowPlayingScreen(
 @Composable
 private fun PortraitNowPlayingScreen(
     controller: PlayerController,
+    playlistController: dev.chardoncs.ezmpv.playlists.PlaylistController,
+    playlists: List<dev.chardoncs.ezmpv.playlists.Playlist>,
     videoHost: VideoSurfaceHost,
     state: PlayerState,
     onBack: () -> Unit,
@@ -130,94 +153,115 @@ private fun PortraitNowPlayingScreen(
     animatedVisibilityScope: AnimatedVisibilityScope,
     modifier: Modifier = Modifier,
 ) {
-    with(sharedTransitionScope) {
-        Scaffold(
-            modifier = modifier
-                .fillMaxSize()
-                .sharedBounds(
-                    sharedContentState = rememberSharedContentState(key = "player-container"),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                ),
-            containerColor = Color.Transparent,
-        ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = state.playlistVisible,
-                enter = fadeIn(),
-                exit = fadeOut(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                ) {
-                    dev.chardoncs.ezmpv.ui.components.CompactTrackHeader(
-                        state = state,
-                        videoHost = videoHost,
-                        artSize = 44,
-                        horizontalPadding = 12,
-                        verticalPadding = 6,
-                    )
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .padding(if (state.playlistVisible) 0.dp else 16.dp)
-                    .clip(RoundedCornerShape(if (state.playlistVisible) 0.dp else 16.dp)),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (!state.playlistVisible) {
-                    PlayerVisual(
-                        state = state,
-                        videoHost = videoHost,
-                        sharedTransitionScope = sharedTransitionScope,
+    val currentTrack = state.playlist.getOrNull(state.currentIndex)
+    var addToPlaylistFor by remember { mutableStateOf<dev.chardoncs.ezmpv.player.MediaItem?>(null) }
+    val isFav = currentTrack?.let { playlistController.isFavorite(it.sourceUri) } == true
+    NowPlayingMenuDrawer(
+        isVideoTrack = currentTrack?.isVideo == true,
+        audioOnly = state.audioOnly,
+        onAddToPlaylist = { addToPlaylistFor = currentTrack },
+        onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
+    ) { onOpenDrawer ->
+        with(sharedTransitionScope) {
+            Scaffold(
+                modifier = modifier
+                    .fillMaxSize()
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState(key = "player-container"),
                         animatedVisibilityScope = animatedVisibilityScope,
-                    )
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = state.playlistVisible,
-                        enter = fadeIn(),
-                        exit = fadeOut(),
+                    ),
+                containerColor = Color.Transparent,
+            ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = state.playlistVisible,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
                     ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = MaterialTheme.colorScheme.surfaceContainer,
+                        dev.chardoncs.ezmpv.ui.components.CompactTrackHeader(
+                            state = state,
+                            videoHost = videoHost,
+                            artSize = 44,
+                            horizontalPadding = 12,
+                            verticalPadding = 6,
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(if (state.playlistVisible) 0.dp else 16.dp)
+                        .clip(RoundedCornerShape(if (state.playlistVisible) 0.dp else 16.dp)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (!state.playlistVisible) {
+                        PlayerVisual(
+                            state = state,
+                            videoHost = videoHost,
+                            sharedTransitionScope = sharedTransitionScope,
+                            animatedVisibilityScope = animatedVisibilityScope,
+                        )
+                    }
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = state.playlistVisible,
+                            enter = fadeIn(),
+                            exit = fadeOut(),
                         ) {
-                            PlaylistOverlay(
-                                state = state,
-                                onSelect = controller::selectTrack,
-                            )
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                            ) {
+                                PlaylistOverlay(
+                                    state = state,
+                                    onSelect = controller::selectTrack,
+                                )
+                            }
                         }
                     }
                 }
+                Modifier.fillMaxWidth().NowPlayingControls(
+                    state = state,
+                    onPlayPause = controller::togglePlayPause,
+                    onSeek = controller::seekTo,
+                    onNext = controller::next,
+                    onPrevious = controller::previous,
+                    onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
+                    onToggleFavorite = { currentTrack?.let { playlistController.toggleFavorite(it) } },
+                    onOpenDrawer = onOpenDrawer,
+                    isFavorite = isFav,
+                    canFavorite = currentTrack != null,
+                    showTrackInfo = !state.playlistVisible,
+                )
             }
-            Modifier.fillMaxWidth().NowPlayingControls(
-                state = state,
-                isVideoTrack = state.playlist.getOrNull(state.currentIndex)?.isVideo == true,
-                onPlayPause = controller::togglePlayPause,
-                onSeek = controller::seekTo,
-                onNext = controller::next,
-                onPrevious = controller::previous,
-                onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
-                onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
-                showTrackInfo = !state.playlistVisible,
-            )
+            }
         }
-        }
+    }
+    addToPlaylistFor?.let { item ->
+        AddToPlaylistDialog(
+            playlists = playlists,
+            onDismiss = { addToPlaylistFor = null },
+            onAddTo = { id -> playlistController.addMediaItems(id, listOf(item)) },
+        )
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun LandscapeNowPlayingScreen(
     controller: PlayerController,
+    playlistController: dev.chardoncs.ezmpv.playlists.PlaylistController,
+    playlists: List<dev.chardoncs.ezmpv.playlists.Playlist>,
     videoHost: VideoSurfaceHost,
     state: PlayerState,
     onBack: () -> Unit,
@@ -226,6 +270,9 @@ private fun LandscapeNowPlayingScreen(
     modifier: Modifier = Modifier,
 ) {
     var controlsVisible by remember { mutableStateOf(true) }
+    var addToPlaylistFor by remember { mutableStateOf<dev.chardoncs.ezmpv.player.MediaItem?>(null) }
+    val currentTrack = state.playlist.getOrNull(state.currentIndex)
+    val isFav = currentTrack?.let { playlistController.isFavorite(it.sourceUri) } == true
 
     LaunchedEffect(state.currentIndex, state.hasVideo, state.audioOnly) {
         controlsVisible = true
@@ -237,6 +284,12 @@ private fun LandscapeNowPlayingScreen(
         }
     }
 
+    NowPlayingMenuDrawer(
+        isVideoTrack = currentTrack?.isVideo == true,
+        audioOnly = state.audioOnly,
+        onAddToPlaylist = { addToPlaylistFor = currentTrack },
+        onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
+    ) { onOpenDrawer ->
     with(sharedTransitionScope) {
         Box(
             modifier = modifier
@@ -272,15 +325,28 @@ private fun LandscapeNowPlayingScreen(
                         Column(
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                         ) {
-                            Text(
-                                text = state.playlist.getOrNull(state.currentIndex)?.title
-                                    ?: "Now Playing",
-                                style = MaterialTheme.typography.titleLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            state.playlist.getOrNull(state.currentIndex)?.artist?.let { artist ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = currentTrack?.title ?: "Now Playing",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                TrackHeaderActions(
+                                    isFavorite = isFav,
+                                    canFavorite = currentTrack != null,
+                                    onToggleFavorite = { currentTrack?.let { playlistController.toggleFavorite(it) } },
+                                    onOpenDrawer = onOpenDrawer,
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                            currentTrack?.artist?.let { artist ->
                                 Text(
                                     text = artist,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -323,12 +389,10 @@ private fun LandscapeNowPlayingScreen(
                     ) {
                         Modifier.fillMaxWidth().NowPlayingControls(
                             state = state,
-                            isVideoTrack = state.playlist.getOrNull(state.currentIndex)?.isVideo == true,
                             onPlayPause = controller::togglePlayPause,
                             onSeek = controller::seekTo,
                             onNext = controller::next,
                             onPrevious = controller::previous,
-                            onToggleAudioOnly = { controller.setAudioOnly(!state.audioOnly) },
                             onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
                         compact = true,
                         showTrackInfo = false,
@@ -358,6 +422,14 @@ private fun LandscapeNowPlayingScreen(
                 }
             }
         }
+    }
+    }
+    addToPlaylistFor?.let { item ->
+        AddToPlaylistDialog(
+            playlists = playlists,
+            onDismiss = { addToPlaylistFor = null },
+            onAddTo = { id -> playlistController.addMediaItems(id, listOf(item)) },
+        )
     }
 }
 
@@ -490,13 +562,15 @@ private fun PlaylistOverlay(
 @Composable
 private fun Modifier.NowPlayingControls(
     state: PlayerState,
-    isVideoTrack: Boolean,
     onPlayPause: () -> Unit,
     onSeek: (Long) -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
-    onToggleAudioOnly: () -> Unit,
-    onTogglePlaylist: () -> Unit,
+    onTogglePlaylist: () -> Unit = {},
+    onToggleFavorite: () -> Unit = {},
+    onOpenDrawer: () -> Unit = {},
+    isFavorite: Boolean = false,
+    canFavorite: Boolean = false,
     compact: Boolean = false,
     showTrackInfo: Boolean = true,
 ) {
@@ -511,13 +585,26 @@ private fun Modifier.NowPlayingControls(
         verticalArrangement = Arrangement.spacedBy(if (compact) 2.dp else 4.dp),
     ) {
         if (showTrackInfo) {
-            Text(
-                text = track?.title ?: "No track selected",
-                style = MaterialTheme.typography.titleLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = track?.title ?: "No track selected",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                TrackHeaderActions(
+                    isFavorite = isFavorite,
+                    canFavorite = canFavorite,
+                    onToggleFavorite = onToggleFavorite,
+                    onOpenDrawer = onOpenDrawer,
+                )
+            }
             Text(
                 text = track?.artist ?: "Unknown artist",
                 style = MaterialTheme.typography.bodyMedium,
@@ -556,6 +643,10 @@ private fun Modifier.NowPlayingControls(
             )
         }
 
+        val btnSize = if (compact) 44.dp else 56.dp
+        val playSize = if (compact) 64.dp else 80.dp
+        val glyphSize = if (compact) 28.dp else 36.dp
+        val playGlyphSize = if (compact) 44.dp else 56.dp
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -566,24 +657,11 @@ private fun Modifier.NowPlayingControls(
             ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(
-                onClick = onTogglePlaylist,
-                modifier = Modifier.size(if (compact) 36.dp else 40.dp),
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = "Toggle playlist",
-                    tint = if (state.playlistVisible) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Spacer(modifier = Modifier.size(btnSize))
             IconButton(
                 onClick = onPrevious,
                 enabled = state.currentIndex > 0,
-                modifier = Modifier.size(if (compact) 44.dp else 56.dp),
+                modifier = Modifier.size(btnSize),
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
                 ),
@@ -591,12 +669,12 @@ private fun Modifier.NowPlayingControls(
                 Icon(
                     Icons.Filled.SkipPrevious,
                     contentDescription = "Previous",
-                    modifier = Modifier.size(if (compact) 28.dp else 36.dp),
+                    modifier = Modifier.size(glyphSize),
                 )
             }
             FilledIconButton(
                 onClick = onPlayPause,
-                modifier = Modifier.size(if (compact) 64.dp else 80.dp),
+                modifier = Modifier.size(playSize),
                 shape = IconButtonDefaults.filledShape,
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
@@ -606,7 +684,7 @@ private fun Modifier.NowPlayingControls(
                 dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
                     isPlaying = state.isPlaying,
                     contentDescription = if (state.isPlaying) "Pause" else "Play",
-                    modifier = Modifier.size(if (compact) 44.dp else 56.dp),
+                    modifier = Modifier.size(playGlyphSize),
                     showRing = false,
                     glyphScaleFactor = 1.7f,
                     tint = MaterialTheme.colorScheme.onPrimary,
@@ -615,7 +693,7 @@ private fun Modifier.NowPlayingControls(
             IconButton(
                 onClick = onNext,
                 enabled = state.currentIndex in 0 until state.playlist.size - 1,
-                modifier = Modifier.size(if (compact) 44.dp else 56.dp),
+                modifier = Modifier.size(btnSize),
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
                 ),
@@ -623,27 +701,110 @@ private fun Modifier.NowPlayingControls(
                 Icon(
                     Icons.Filled.SkipNext,
                     contentDescription = "Next",
-                    modifier = Modifier.size(if (compact) 28.dp else 36.dp),
+                    modifier = Modifier.size(glyphSize),
                 )
             }
-            if (isVideoTrack) {
-                IconButton(
-                    onClick = onToggleAudioOnly,
-                    modifier = Modifier.size(if (compact) 36.dp else 40.dp),
-                    colors = IconButtonDefaults.iconButtonColors(
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ),
-                ) {
-                    Icon(
-                        Icons.Filled.MusicNote,
-                        contentDescription = "Toggle audio-only",
-                        tint = if (state.audioOnly) MaterialTheme.colorScheme.primary
-                            else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            } else {
-                Spacer(modifier = Modifier.size(if (compact) 36.dp else 40.dp))
+            IconButton(
+                onClick = onTogglePlaylist,
+                modifier = Modifier.size(btnSize),
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = stringResource(R.string.playlist_playlists),
+                    tint = if (state.playlistVisible) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
+    }
+}
+
+@Composable
+private fun TrackHeaderActions(
+    isFavorite: Boolean,
+    canFavorite: Boolean,
+    onToggleFavorite: () -> Unit,
+    onOpenDrawer: () -> Unit,
+    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
+) {
+    if (canFavorite) {
+        IconButton(
+            onClick = onToggleFavorite,
+            modifier = Modifier.size(40.dp),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = tint),
+        ) {
+            Icon(
+                if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                contentDescription = stringResource(R.string.cd_favorite),
+                tint = if (isFavorite) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+    IconButton(
+        onClick = onOpenDrawer,
+        modifier = Modifier.size(40.dp),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = tint),
+    ) {
+        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_actions))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NowPlayingMenuDrawer(
+    isVideoTrack: Boolean,
+    audioOnly: Boolean,
+    onAddToPlaylist: () -> Unit,
+    onToggleAudioOnly: () -> Unit,
+    content: @Composable (onOpenDrawer: () -> Unit) -> Unit,
+) {
+    var show by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+    content({ show = true })
+    if (show) {
+        ModalBottomSheet(
+            onDismissRequest = { show = false },
+            sheetState = sheetState,
+        ) {
+            MenuDrawerItems(
+                isVideoTrack = isVideoTrack,
+                audioOnly = audioOnly,
+                onAddToPlaylist = {
+                    show = false
+                    onAddToPlaylist()
+                },
+                onToggleAudioOnly = {
+                    show = false
+                    onToggleAudioOnly()
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MenuDrawerItems(
+    isVideoTrack: Boolean,
+    audioOnly: Boolean,
+    onAddToPlaylist: () -> Unit,
+    onToggleAudioOnly: () -> Unit,
+) {
+    NavigationDrawerItem(
+        label = { Text(stringResource(R.string.playlist_add_to)) },
+        selected = false,
+        onClick = onAddToPlaylist,
+        icon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null) },
+    )
+    if (isVideoTrack) {
+        NavigationDrawerItem(
+            label = { Text(if (audioOnly) "Show video" else "Audio only") },
+            selected = false,
+            onClick = onToggleAudioOnly,
+            icon = { Icon(Icons.Filled.MusicNote, contentDescription = null) },
+        )
     }
 }

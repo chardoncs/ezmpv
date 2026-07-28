@@ -22,6 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.SelectAll
@@ -57,12 +59,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chardoncs.ezmpv.EzmpvApplication
 import dev.chardoncs.ezmpv.R
 import dev.chardoncs.ezmpv.browse.DirEntry
 import dev.chardoncs.ezmpv.browse.StorageAccess
 import dev.chardoncs.ezmpv.player.MediaItem
 import dev.chardoncs.ezmpv.player.PlayerController
+import dev.chardoncs.ezmpv.playlists.Playlist
+import dev.chardoncs.ezmpv.playlists.PlaylistController
+import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -84,6 +90,10 @@ fun FileBrowserScreen(
     val browseController = remember {
         (context.applicationContext as EzmpvApplication).browseController
     }
+    val playlistController = remember {
+        (context.applicationContext as EzmpvApplication).playlistController
+    }
+    val playlists by playlistController.playlists.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     val stack = rememberSaveable(rootTreeUri, saver = UriListSaver) { mutableStateListOf(rootTreeUri) }
@@ -97,6 +107,7 @@ fun FileBrowserScreen(
     var actionTarget by remember { mutableStateOf<DirEntry?>(null) }
     var sheetEntry by remember { mutableStateOf<DirEntry?>(null) }
     var deleteTargets by remember { mutableStateOf<List<DirEntry>?>(null) }
+    var addToPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     val selection = remember { mutableStateSetOf<Uri>() }
 
     LaunchedEffect(currentUri) {
@@ -152,6 +163,14 @@ fun FileBrowserScreen(
                         val items = selected.filter { !it.isDirectory }.map(::entryToMediaItem)
                         if (items.isNotEmpty()) {
                             controller.playNext(items)
+                            selection.clear()
+                        }
+                    },
+                    onAddToPlaylist = {
+                        val selected = selectedEntries(entries, selection)
+                        val items = selected.filter { !it.isDirectory }.map(::entryToMediaItem)
+                        if (items.isNotEmpty()) {
+                            addToPlaylistItems = items
                             selection.clear()
                         }
                     },
@@ -236,6 +255,8 @@ fun FileBrowserScreen(
         EntryActionSheet(
             entry = target,
             isBookmarked = browseController.isBookmarked(target.uri),
+            isFavorite = !target.isDirectory && playlistController.isFavorite(target.uri),
+            canFavorite = !target.isDirectory,
             onDismiss = { actionTarget = null },
             onPlayFile = {
                 actionTarget = null
@@ -254,6 +275,14 @@ fun FileBrowserScreen(
                 actionTarget = null
                 controller.playNext(listOf(entryToMediaItem(target)))
             },
+            onAddToPlaylist = {
+                actionTarget = null
+                addToPlaylistItems = listOf(entryToMediaItem(target))
+            },
+            onToggleFavorite = {
+                actionTarget = null
+                playlistController.toggleFavorite(entryToMediaItem(target))
+            },
             onToggleBookmark = {
                 actionTarget = null
                 browseController.toggleBookmark(target.uri, target.name)
@@ -262,6 +291,14 @@ fun FileBrowserScreen(
                 actionTarget = null
                 sheetEntry = target
             },
+        )
+    }
+
+    addToPlaylistItems?.let { items ->
+        AddToPlaylistDialog(
+            playlists = playlists,
+            onDismiss = { addToPlaylistItems = null },
+            onAddTo = { id -> playlistController.addMediaItems(id, items) },
         )
     }
 
@@ -399,6 +436,7 @@ private fun SelectionTopBar(
     onPlayAll: () -> Unit,
     onAppend: () -> Unit,
     onPlayNext: () -> Unit,
+    onAddToPlaylist: () -> Unit,
     onAddBookmarks: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -422,6 +460,9 @@ private fun SelectionTopBar(
             IconButton(onClick = onPlayNext) {
                 Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = stringResource(R.string.browse_play_next))
             }
+            IconButton(onClick = onAddToPlaylist) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = stringResource(R.string.cd_add_to_playlist))
+            }
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = stringResource(R.string.browse_delete))
             }
@@ -434,11 +475,15 @@ private fun SelectionTopBar(
 private fun EntryActionSheet(
     entry: DirEntry,
     isBookmarked: Boolean,
+    isFavorite: Boolean,
+    canFavorite: Boolean,
     onDismiss: () -> Unit,
     onPlayFile: () -> Unit,
     onPlayFolder: (recursive: Boolean) -> Unit,
     onAppend: () -> Unit,
     onPlayNext: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onToggleFavorite: () -> Unit,
     onToggleBookmark: () -> Unit,
     onShowInfo: () -> Unit,
 ) {
@@ -456,6 +501,24 @@ private fun EntryActionSheet(
                 DropdownMenuItem(text = { Text(stringResource(R.string.browse_play)) }, onClick = onPlayFile)
                 DropdownMenuItem(text = { Text(stringResource(R.string.browse_append)) }, onClick = onAppend)
                 DropdownMenuItem(text = { Text(stringResource(R.string.browse_play_next)) }, onClick = onPlayNext)
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.playlist_add_to)) },
+                    onClick = onAddToPlaylist,
+                )
+                if (canFavorite) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (isFavorite) R.string.playlist_unfavorite else R.string.playlist_favorite)) },
+                        onClick = onToggleFavorite,
+                        leadingIcon = {
+                            Icon(
+                                if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                                contentDescription = null,
+                                tint = if (isFavorite) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        },
+                    )
+                }
                 DropdownMenuItem(text = { Text(stringResource(R.string.browse_info)) }, onClick = onShowInfo)
             }
         }

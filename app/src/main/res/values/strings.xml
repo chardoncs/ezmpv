@@ -45,4 +45,31 @@
     <string name="about_version">Version %1$s</string>
     <string name="about_copyright">Copyright © 2026 Charles Dong</string>
     <string name="about_license">Licensed under the GNU General Public License 3.0.</string>
+
+    <string name="playlist_playlists">Playlists</string>
+    <string name="playlist_create">Create playlist</string>
+    <string name="playlist_name">Name</string>
+    <string name="playlist_description">Description</string>
+    <string name="playlist_create_button">Create</string>
+    <string name="playlist_cancel">Cancel</string>
+    <string name="playlist_empty">No playlists yet. Tap + to create one.</string>
+    <string name="playlist_track_count">%1$d tracks</string>
+    <string name="playlist_add_from_library">Add from library</string>
+    <string name="playlist_add_to">Add to playlist</string>
+    <string name="playlist_remove">Remove from playlist</string>
+    <string name="playlist_delete">Delete playlist</string>
+    <string name="playlist_rename">Rename</string>
+    <string name="playlist_change_cover">Change cover image</string>
+    <string name="playlist_clear_cover">Clear cover image</string>
+    <string name="playlist_save">Save</string>
+    <string name="playlist_pick_tracks">Pick tracks</string>
+    <string name="playlist_unavailable">This file is currently unavailable</string>
+    <string name="playlist_favorite">Favorite</string>
+    <string name="playlist_unfavorite">Unfavorite</string>
+    <string name="playlist_favorites_cover">Favorites cover</string>
+    <string name="playlist_no_playlists">No playlists</string>
+    <string name="playlist_done">Done</string>
+    <string name="cd_favorite">Favorite</string>
+    <string name="cd_add_to_playlist">Add to playlist</string>
+    <string name="cd_playlist_cover">Playlist cover</string>
 </resources>

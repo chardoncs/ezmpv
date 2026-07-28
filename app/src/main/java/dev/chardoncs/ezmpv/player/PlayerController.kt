@@ -202,6 +202,8 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
 
     suspend fun getArt(item: MediaItem) = artCache.getArt(item)
 
+    suspend fun loadMetadata(item: MediaItem): MediaItem? = folderRepo.loadMetadata(item)
+
     fun togglePlayPause() = player.playPause()
 
     fun setPlaying(play: Boolean) {

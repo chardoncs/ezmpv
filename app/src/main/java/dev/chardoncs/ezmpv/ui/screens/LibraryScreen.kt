@@ -1,8 +1,10 @@
 package dev.chardoncs.ezmpv.ui.screens
 
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -28,21 +30,31 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.ViewList
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -57,14 +69,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.chardoncs.ezmpv.EzmpvApplication
+import dev.chardoncs.ezmpv.R
 import dev.chardoncs.ezmpv.audio.GroupBy
 import dev.chardoncs.ezmpv.audio.LibraryPreferences
 import dev.chardoncs.ezmpv.audio.LibraryType
@@ -72,12 +88,22 @@ import dev.chardoncs.ezmpv.audio.ViewMode
 import dev.chardoncs.ezmpv.player.MediaItem
 import dev.chardoncs.ezmpv.player.PlayerController
 import dev.chardoncs.ezmpv.player.PlayerState
+import dev.chardoncs.ezmpv.playlists.Playlist
+import dev.chardoncs.ezmpv.playlists.ResolvedEntry
+import dev.chardoncs.ezmpv.playlists.ResolvedPlaylist
+import dev.chardoncs.ezmpv.playlists.toMediaItem
+import dev.chardoncs.ezmpv.playlists.toPlaylistEntry
+import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
+import dev.chardoncs.ezmpv.ui.components.LibraryTrackPickerSheet
+import dev.chardoncs.ezmpv.ui.components.PlaylistCover
+import dev.chardoncs.ezmpv.ui.components.PlaylistEditDialog
 import kotlinx.coroutines.launch
 
 private sealed class LibraryScreen {
     data object Home : LibraryScreen()
     data class Section(val type: LibraryType) : LibraryScreen()
     data class DrillDown(val type: LibraryType, val groupKey: String) : LibraryScreen()
+    data class PlaylistDetail(val playlistId: String) : LibraryScreen()
 }
 
 private val LibraryScreenSaver = androidx.compose.runtime.saveable.Saver<androidx.compose.runtime.snapshots.SnapshotStateList<LibraryScreen>, MutableList<Any>>(
@@ -87,6 +113,7 @@ private val LibraryScreenSaver = androidx.compose.runtime.saveable.Saver<android
                 is LibraryScreen.Home -> listOf("home")
                 is LibraryScreen.Section -> listOf("section", screen.type.name)
                 is LibraryScreen.DrillDown -> listOf("drill", screen.type.name, screen.groupKey)
+                is LibraryScreen.PlaylistDetail -> listOf("playlist", screen.playlistId)
             }
         }.toMutableList()
     },
@@ -100,6 +127,7 @@ private val LibraryScreenSaver = androidx.compose.runtime.saveable.Saver<android
                     .getOrNull()?.let { LibraryScreen.Section(it) }
                 "drill" -> runCatching { LibraryType.valueOf(list[1]) }
                     .getOrNull()?.let { LibraryScreen.DrillDown(it, list[2]) }
+                "playlist" -> LibraryScreen.PlaylistDetail(list[1])
                 else -> null
             }
         }.let { androidx.compose.runtime.mutableStateListOf<LibraryScreen>().apply { addAll(it) } }
@@ -115,10 +143,20 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val playlistController = remember {
+        (context.applicationContext as EzmpvApplication).playlistController
+    }
+    val playlists by playlistController.playlists.collectAsStateWithLifecycle()
+    val resolved by playlistController.resolved.collectAsStateWithLifecycle()
     val prefs = remember { LibraryPreferences(context) }
     val state by controller.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var menuOpen by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val unavailableMsg = stringResource(R.string.playlist_unavailable)
+    var createDialog by remember { mutableStateOf(false) }
+    var renameTarget by remember { mutableStateOf<Playlist?>(null) }
+    var coverPickTarget by remember { mutableStateOf<String?>(null) }
 
     val audioViewMode by prefs.viewMode(LibraryType.AUDIO).collectAsStateWithLifecycle(ViewMode.GRID)
     val audioGroupBy by prefs.groupBy(LibraryType.AUDIO).collectAsStateWithLifecycle(GroupBy.ALBUM)
@@ -133,6 +171,16 @@ fun LibraryScreen(
             controller.playAdhoc(uri, mime)
             onOpenPlayer()
         }
+    }
+
+    val coverPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        val targetId = coverPickTarget
+        if (uri != null && targetId != null) {
+            playlistController.update(targetId, coverImageUri = uri)
+        }
+        coverPickTarget = null
     }
 
     val audioTracks = remember(state.library) {
@@ -158,10 +206,20 @@ fun LibraryScreen(
         is LibraryScreen.Home -> "Library"
         is LibraryScreen.Section -> if (current.type == LibraryType.AUDIO) "Audio" else "Video"
         is LibraryScreen.DrillDown -> current.groupKey
+        is LibraryScreen.PlaylistDetail -> playlists.firstOrNull { it.id == current.playlistId }?.name
+            ?: "Playlist"
     }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        floatingActionButton = {
+            if (current is LibraryScreen.Home) {
+                FloatingActionButton(onClick = { createDialog = true }) {
+                    Icon(Icons.Filled.Add, contentDescription = stringResource(R.string.playlist_create))
+                }
+            }
+        },
         topBar = {
             TopAppBar(
                 title = { Text(title) },
@@ -189,6 +247,22 @@ fun LibraryScreen(
                                 },
                             )
                         }
+                    } else if (current is LibraryScreen.PlaylistDetail) {
+                        val pl = playlists.firstOrNull { it.id == current.playlistId }
+                        PlaylistDetailActions(
+                            playlist = pl,
+                            onRename = { renameTarget = pl },
+                            onChangeCover = {
+                                coverPickTarget = current.playlistId
+                                coverPicker.launch(
+                                    PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                    ),
+                                )
+                            },
+                            onClearCover = { playlistController.update(current.playlistId, clearCover = true) },
+                            onDelete = { playlistController.delete(current.playlistId); pop() },
+                        )
                     }
                 },
             )
@@ -207,8 +281,12 @@ fun LibraryScreen(
                 current is LibraryScreen.Home -> LibraryHome(
                     audioCount = audioTracks.size,
                     videoCount = videoTracks.size,
+                    playlists = playlists,
+                    resolved = resolved,
+                    controller = controller,
                     onOpenVideo = { push(LibraryScreen.Section(LibraryType.VIDEO)) },
                     onOpenAudio = { push(LibraryScreen.Section(LibraryType.AUDIO)) },
+                    onOpenPlaylist = { id -> push(LibraryScreen.PlaylistDetail(id)) },
                 )
                 current is LibraryScreen.Section -> SectionScreen(
                     type = current.type,
@@ -232,8 +310,42 @@ fun LibraryScreen(
                     controller = controller,
                     onOpenPlayer = onOpenPlayer,
                 )
+                current is LibraryScreen.PlaylistDetail -> PlaylistDetailScreen(
+                    playlistId = current.playlistId,
+                    playlists = playlists,
+                    resolved = resolved,
+                    state = state,
+                    controller = controller,
+                    playlistController = playlistController,
+                    onOpenPlayer = onOpenPlayer,
+                    onUnavailable = { scope.launch { snackbarHostState.showSnackbar(unavailableMsg) } },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
+    }
+
+    if (createDialog) {
+        PlaylistEditDialog(
+            onDismiss = { createDialog = false },
+            onConfirm = { name, desc ->
+                createDialog = false
+                playlistController.create(name, desc)
+            },
+        )
+    }
+    renameTarget?.let { pl ->
+        PlaylistEditDialog(
+            initialName = pl.name,
+            initialDescription = pl.description,
+            title = stringResource(R.string.playlist_rename),
+            confirmLabel = stringResource(R.string.playlist_save),
+            onDismiss = { renameTarget = null },
+            onConfirm = { name, desc ->
+                renameTarget = null
+                playlistController.update(pl.id, name = name, description = desc)
+            },
+        )
     }
 }
 
@@ -257,38 +369,42 @@ private fun EmptyLibraryState(modifier: Modifier) {
 private fun LibraryHome(
     audioCount: Int,
     videoCount: Int,
+    playlists: List<Playlist>,
+    resolved: List<ResolvedPlaylist>,
+    controller: PlayerController,
     onOpenVideo: () -> Unit,
     onOpenAudio: () -> Unit,
+    onOpenPlaylist: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     LazyColumn(modifier = modifier.fillMaxSize()) {
         item(key = "playlists_header") {
             SectionHeader("Playlists")
         }
-        item(key = "playlists_placeholder") {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(12.dp),
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.PlaylistPlay,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        "Coming soon",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        if (playlists.isEmpty()) {
+            item(key = "playlists_empty") {
+                Text(
+                    text = stringResource(R.string.playlist_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+            }
+        } else {
+            val ordered = playlists.sortedWith(
+                compareBy(
+                    { !it.isFavorites },
+                    { it.name.lowercase() },
+                ),
+            )
+            items(ordered, key = { it.id }) { pl ->
+                val rp = resolved.firstOrNull { it.playlist.id == pl.id }
+                PlaylistRow(
+                    playlist = pl,
+                    resolved = rp,
+                    controller = controller,
+                    onClick = { onOpenPlaylist(pl.id) },
+                )
             }
         }
 
@@ -308,6 +424,90 @@ private fun LibraryHome(
                 icon = Icons.Filled.GraphicEq,
                 onClick = onOpenAudio,
             )
+        }
+    }
+}
+
+@Composable
+private fun PlaylistRow(
+    playlist: Playlist,
+    resolved: ResolvedPlaylist?,
+    controller: PlayerController,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        PlaylistCover(
+            playlist = playlist,
+            resolved = resolved,
+            controller = controller,
+            modifier = Modifier.size(56.dp),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = playlist.name,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = stringResource(R.string.playlist_track_count, playlist.entries.size),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = null,
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer(rotationZ = 180f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun PlaylistDetailActions(
+    playlist: Playlist?,
+    onRename: () -> Unit,
+    onChangeCover: () -> Unit,
+    onClearCover: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    if (playlist == null) return
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { menuOpen = true }) {
+            Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_actions))
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.playlist_rename)) },
+                onClick = { menuOpen = false; onRename() },
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.playlist_change_cover)) },
+                onClick = { menuOpen = false; onChangeCover() },
+            )
+            if (playlist.coverImageUri != null && !playlist.isFavorites) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.playlist_clear_cover)) },
+                    onClick = { menuOpen = false; onClearCover() },
+                )
+            }
+            if (!playlist.isFavorites) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.playlist_delete)) },
+                    onClick = { menuOpen = false; onDelete() },
+                )
+            }
         }
     }
 }
@@ -1000,6 +1200,254 @@ private fun TrackListOrGrid(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlaylistDetailScreen(
+    playlistId: String,
+    playlists: List<Playlist>,
+    resolved: List<ResolvedPlaylist>,
+    state: PlayerState,
+    controller: PlayerController,
+    playlistController: dev.chardoncs.ezmpv.playlists.PlaylistController,
+    onOpenPlayer: () -> Unit,
+    onUnavailable: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val rp = resolved.firstOrNull { it.playlist.id == playlistId }
+    val playlist = rp?.playlist
+    var showPicker by remember { mutableStateOf(false) }
+    var showAddToPlaylist by remember { mutableStateOf<MediaItem?>(null) }
+
+    if (playlist == null) {
+        Box(modifier = modifier.padding(24.dp), contentAlignment = Alignment.Center) {
+            Text("Playlist not found.", style = MaterialTheme.typography.bodyMedium)
+        }
+        return
+    }
+    val availableEntries = rp.entries.filter { it.available }
+    LazyColumn(modifier = modifier.fillMaxSize()) {
+        item(key = "pl_header") {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                PlaylistCover(
+                    playlist = playlist,
+                    resolved = rp,
+                    controller = controller,
+                    modifier = Modifier.size(180.dp).aspectRatio(1f),
+                )
+                if (playlist.description.isNotBlank()) {
+                    Text(
+                        text = playlist.description,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            }
+        }
+        item(key = "pl_add_buttons") {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            ) {
+                androidx.compose.material3.FilledTonalButton(
+                    onClick = { showPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.playlist_add_from_library))
+                }
+            }
+        }
+        if (rp.entries.isEmpty()) {
+            item(key = "pl_empty") {
+                Text(
+                    "No tracks in this playlist.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+        } else {
+            itemsIndexed(rp.entries, key = { i, re -> re.entry.uri.toString() + "_" + i }) { index, re ->
+                ResolvedTrackRow(
+                    resolved = re,
+                    controller = controller,
+                    isCurrent = re.available && re.mediaItem?.sourceUri ==
+                        state.playlist.getOrNull(state.currentIndex)?.sourceUri,
+                    isPlaying = re.available && re.mediaItem?.sourceUri ==
+                        state.playlist.getOrNull(state.currentIndex)?.sourceUri && state.isPlaying,
+                    onPlay = {
+                        if (!re.available) { onUnavailable(); return@ResolvedTrackRow }
+                        val queue = availableEntries.mapNotNull { it.mediaItem }
+                        val pos = queue.indexOfFirst { it.sourceUri == re.mediaItem?.sourceUri }
+                        if (pos >= 0) {
+                            controller.playFromLibrary(queue, pos)
+                            onOpenPlayer()
+                        }
+                    },
+                    onRemove = { playlistController.removeEntry(playlistId, re.entry.uri) },
+                    onAddToPlaylist = { showAddToPlaylist = re.mediaItem ?: re.entry.toMediaItem() },
+                    onFavoriteToggle = {
+                        val item = re.mediaItem ?: re.entry.toMediaItem()
+                        playlistController.toggleFavorite(item)
+                    },
+                    isFavorite = playlistController.isFavorite(re.entry.uri),
+                )
+            }
+        }
+    }
+
+    if (showPicker) {
+        LibraryTrackPickerSheet(
+            tracks = state.library,
+            onDismiss = { showPicker = false },
+            onConfirm = { items -> playlistController.addMediaItems(playlistId, items) },
+        )
+    }
+    showAddToPlaylist?.let { item ->
+        AddToPlaylistDialog(
+            playlists = playlists,
+            onDismiss = { showAddToPlaylist = null },
+            onAddTo = { id -> playlistController.addMediaItems(id, listOf(item)) },
+        )
+    }
+}
+
+@Composable
+private fun ResolvedTrackRow(
+    resolved: ResolvedEntry,
+    controller: PlayerController,
+    isCurrent: Boolean,
+    isPlaying: Boolean,
+    onPlay: () -> Unit,
+    onRemove: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onFavoriteToggle: () -> Unit,
+    isFavorite: Boolean,
+) {
+    val entry = resolved.entry
+    val available = resolved.available
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onPlay)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .then(if (available) Modifier else Modifier.alpha(0.5f)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ResolvedTrackArt(
+            entry = entry,
+            available = available,
+            controller = controller,
+            modifier = Modifier.size(40.dp),
+        )
+        Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
+            Text(
+                text = entry.title,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isCurrent) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = entry.artist ?: "Unknown artist",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (available) {
+            Text(
+                text = formatTime(entry.durationMs),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        var menuOpen by remember { mutableStateOf(false) }
+        Box {
+            IconButton(onClick = { menuOpen = true }) {
+                Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_actions))
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (available) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.playlist_add_to)) },
+                        onClick = { menuOpen = false; onAddToPlaylist() },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (isFavorite) R.string.playlist_unfavorite else R.string.playlist_favorite)) },
+                        onClick = { menuOpen = false; onFavoriteToggle() },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.playlist_remove)) },
+                    onClick = { menuOpen = false; onRemove() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ResolvedTrackArt(
+    entry: dev.chardoncs.ezmpv.playlists.PlaylistEntry,
+    available: Boolean,
+    controller: PlayerController,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(8.dp),
+    ) {
+        if (!available) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.BrokenImage,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            return@Surface
+        }
+        if (entry.isVideo) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.VideoLibrary,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            return@Surface
+        }
+        var bitmap by remember(entry.uri) { mutableStateOf<Bitmap?>(null) }
+        LaunchedEffect(entry.uri) {
+            bitmap = controller.getArt(entry.toMediaItem())
+        }
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)),
+            )
+        } else {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Filled.MusicNote,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(22.dp),
+                )
             }
         }
     }
