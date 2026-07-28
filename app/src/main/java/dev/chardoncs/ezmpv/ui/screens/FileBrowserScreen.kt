@@ -66,8 +66,6 @@ import dev.chardoncs.ezmpv.browse.DirEntry
 import dev.chardoncs.ezmpv.browse.StorageAccess
 import dev.chardoncs.ezmpv.player.MediaItem
 import dev.chardoncs.ezmpv.player.PlayerController
-import dev.chardoncs.ezmpv.playlists.Playlist
-import dev.chardoncs.ezmpv.playlists.PlaylistController
 import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch

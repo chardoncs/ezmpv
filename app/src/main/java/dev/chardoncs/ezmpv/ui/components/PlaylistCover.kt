@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -31,7 +30,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import dev.chardoncs.ezmpv.EzmpvApplication
 import dev.chardoncs.ezmpv.R
 import dev.chardoncs.ezmpv.player.PlayerController
 import dev.chardoncs.ezmpv.playlists.Playlist
@@ -45,7 +43,6 @@ fun PlaylistCover(
     controller: PlayerController,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     if (playlist.isFavorites) {
         Surface(
             modifier = modifier,

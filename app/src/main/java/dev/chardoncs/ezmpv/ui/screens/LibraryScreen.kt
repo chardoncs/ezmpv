@@ -28,20 +28,15 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BrokenImage
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveFileRenameOutline
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,7 +49,6 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -92,7 +86,6 @@ import dev.chardoncs.ezmpv.playlists.Playlist
 import dev.chardoncs.ezmpv.playlists.ResolvedEntry
 import dev.chardoncs.ezmpv.playlists.ResolvedPlaylist
 import dev.chardoncs.ezmpv.playlists.toMediaItem
-import dev.chardoncs.ezmpv.playlists.toPlaylistEntry
 import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
 import dev.chardoncs.ezmpv.ui.components.LibraryTrackPickerSheet
 import dev.chardoncs.ezmpv.ui.components.PlaylistCover
@@ -1489,7 +1482,7 @@ private fun keyForGroup(item: MediaItem, groupBy: GroupBy): String = when (group
     GroupBy.YEAR -> item.year?.toString() ?: "Unknown year"
 }
 
-private fun parentFolder(uri: android.net.Uri): String {
+private fun parentFolder(uri: Uri): String {
     val seg = uri.lastPathSegment ?: return "Unknown location"
     val cut = seg.lastIndexOf('/')
     return if (cut > 0) seg.substring(0, cut) else seg

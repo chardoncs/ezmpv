@@ -44,9 +44,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberBottomSheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -728,7 +730,7 @@ private fun TrackHeaderActions(
     canFavorite: Boolean,
     onToggleFavorite: () -> Unit,
     onOpenDrawer: () -> Unit,
-    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     if (canFavorite) {
         IconButton(
@@ -763,8 +765,8 @@ private fun NowPlayingMenuDrawer(
     content: @Composable (onOpenDrawer: () -> Unit) -> Unit,
 ) {
     var show by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
-    content({ show = true })
+    val sheetState = rememberBottomSheetState(SheetValue.Hidden)
+    content { show = true }
     if (show) {
         ModalBottomSheet(
             onDismissRequest = { show = false },
