@@ -73,7 +73,7 @@ class PlaylistRepository(private val context: Context) {
 
     suspend fun delete(id: String) {
         val list = playlists.first()
-        write(list.filterNot { it.id == id || it.isFavorites })
+        write(list.filterNot { it.id == id && !it.isFavorites })
     }
 
     suspend fun addEntries(id: String, entries: List<PlaylistEntry>) {
