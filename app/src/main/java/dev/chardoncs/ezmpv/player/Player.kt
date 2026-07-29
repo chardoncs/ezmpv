@@ -51,7 +51,12 @@ class Player(private val context: Context) {
         override fun event(eventId: Int) {
             when (eventId) {
                 MPV_EVENT_END_FILE -> if (!awaitingFileLoaded) handleEndFile()
-                MPV_EVENT_FILE_LOADED -> awaitingFileLoaded = false
+                MPV_EVENT_FILE_LOADED -> {
+                    if (awaitingFileLoaded) {
+                        awaitingFileLoaded = false
+                        mpv?.setPropertyBoolean("pause", false)
+                    }
+                }
             }
         }
     }
@@ -119,9 +124,9 @@ class Player(private val context: Context) {
         eofHandled = false
         playbackEnded = false
         awaitingFileLoaded = true
-        _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0) }
+        _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0, isPlaying = false) }
+        m.setPropertyBoolean("pause", true)
         m.command(arrayOf("loadfile", path, "replace"))
-        m.setPropertyBoolean("pause", false)
     }
 
     fun setPlaylist(items: List<MediaItem>) {
