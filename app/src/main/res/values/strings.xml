@@ -45,7 +45,22 @@
     <string name="about_version">Version %1$s</string>
     <string name="about_copyright">Copyright © 2026 Charles Dong</string>
     <string name="about_license">Licensed under the GNU General Public License 3.0.</string>
-
+    <string name="about_license_notice1">
+        This program is free software: you can redistribute it and/or modify
+        it under the terms of the GNU General Public License as published by
+        the Free Software Foundation, either version 3 of the License, or
+        any later version.
+    </string>
+    <string name="about_license_notice2">
+        This program is distributed in the hope that it will be useful,
+        but WITHOUT ANY WARRANTY; without even the implied warranty of
+        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+        GNU General Public License for more details.
+    </string>
+    <string name="about_license_notice3">
+        You should have received a copy of the GNU General Public License
+        along with this program.  If not, see &lt;https://www.gnu.org/licenses/&gt;.
+    </string>
     <string name="playlist_playlists">Playlists</string>
     <string name="playlist_create">Create playlist</string>
     <string name="playlist_name">Name</string>

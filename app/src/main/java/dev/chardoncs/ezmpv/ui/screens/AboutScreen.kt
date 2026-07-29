@@ -117,10 +117,34 @@ fun AboutScreen(
             Text(
                 text = annotatedLicense,
                 style = MaterialTheme.typography.bodyMedium.copy(textDecoration = TextDecoration.Underline),
-                textAlign = TextAlign.Center,
+                textAlign = TextAlign.Start,
                 modifier = Modifier
                     .padding(top = 4.dp)
                     .clickable { uriHandler.openUri(LICENSE_URL) },
+            )
+            Text(
+                text = stringResource(R.string.about_license_notice1),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start,
+                modifier = Modifier
+                    .padding(top = 8.dp, start = 20.dp, end = 20.dp),
+            )
+            Text(
+                text = stringResource(R.string.about_license_notice2),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start,
+                modifier = Modifier
+                    .padding(top = 4.dp, start = 20.dp, end = 20.dp),
+            )
+            Text(
+                text = stringResource(R.string.about_license_notice3),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Start,
+                modifier = Modifier
+                    .padding(top = 4.dp, start = 20.dp, end = 20.dp),
             )
         }
     }
