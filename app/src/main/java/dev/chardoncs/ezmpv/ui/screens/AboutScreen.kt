@@ -146,6 +146,14 @@ fun AboutScreen(
                 modifier = Modifier
                     .padding(top = 4.dp, start = 20.dp, end = 20.dp),
             )
+            Text(
+                text = stringResource(R.string.about_logo_notice),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(top = 8.dp),
+            )
         }
     }
 }
