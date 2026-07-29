@@ -83,7 +83,7 @@ class PlaylistController(
                     true
                 }.getOrDefault(false)
             }
-            _availabilityCache.value = _availabilityCache.value + (entry.uri.toString() to ok)
+            _availabilityCache.value += (entry.uri.toString() to ok)
         }
     }
 
