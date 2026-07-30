@@ -4,7 +4,7 @@
 
 A calm and simple offline media player for Android, built on top of libmpv through [libmpv-android](https://github.com/jarnedemeulemeester/libmpv-android).
 
-![GitHub Release](https://img.shields.io/github/v/release/chardoncs/ezmpv)
+[![GitHub Release](https://img.shields.io/github/v/release/chardoncs/ezmpv)](https://github.com/chardoncs/ezmpv/releases/latest)
 
 > [!NOTE]
 >
