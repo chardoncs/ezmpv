@@ -1,6 +1,7 @@
 package dev.chardoncs.ezmpv.audio
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -12,6 +13,7 @@ private val VIDEO_VIEW_MODE = stringPreferencesKey("video_view_mode")
 private val VIDEO_GROUP_BY = stringPreferencesKey("video_group_by")
 private val AUDIO_VIEW_MODE = stringPreferencesKey("audio_view_mode")
 private val AUDIO_GROUP_BY = stringPreferencesKey("audio_group_by")
+private val RESTART_ON_PREVIOUS = booleanPreferencesKey("restart_track_on_previous")
 
 enum class ViewMode { LIST, GRID }
 enum class GroupBy { LOCATION, ARTIST, ALBUM, YEAR }
@@ -33,6 +35,13 @@ class LibraryPreferences(private val context: Context) {
             val default = if (type == LibraryType.VIDEO) GroupBy.LOCATION else GroupBy.ALBUM
             p[key]?.let { runCatching { GroupBy.valueOf(it) }.getOrNull() } ?: default
         }
+
+    fun restartOnPrevious(): Flow<Boolean> =
+        context.libraryPrefs.data.map { it[RESTART_ON_PREVIOUS] ?: false }
+
+    suspend fun setRestartOnPrevious(enabled: Boolean) {
+        context.libraryPrefs.edit { it[RESTART_ON_PREVIOUS] = enabled }
+    }
 
     suspend fun setViewMode(type: LibraryType, mode: ViewMode) {
         context.libraryPrefs.edit {

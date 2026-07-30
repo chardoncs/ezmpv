@@ -287,7 +287,10 @@ private fun EzmpvNavHost(
             )
         }
         composable(route = "settings") {
-            SettingsScreen(onBack = { navController.popBackStack() })
+            SettingsScreen(
+                controller = controller,
+                onBack = { navController.popBackStack() },
+            )
         }
         composable(route = "about") {
             AboutScreen(onBack = { navController.popBackStack() })

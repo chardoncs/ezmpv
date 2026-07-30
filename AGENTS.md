@@ -71,7 +71,10 @@ app/src/main/java/dev/chardoncs/ezmpv/
     ├── screens/
     │   ├── BrowseScreen.kt     # Browse tab: bookmarks list (with IconType icons) + add/remove bookmark
     │   ├── FileBrowserScreen.kt  # file manager: in-screen dir back stack + DirEntry list + per-item ModalBottomSheet (play / append / play-next / add-to-playlist / favorite / bookmark / info) + long-press multi-select (select all / play all / append / play-next / add-to-playlist / add-to-bookmarks / delete)
-    │   ├── PlaceholderScreen.kt  # More placeholder
+    │   ├── PlaceholderScreen.kt  # (removed — replaced by MoreScreen + SettingsScreen + AboutScreen)
+    │   ├── MoreScreen.kt        # More tab: rows for Settings + About (custom Row, matches settings row styling)
+    │   ├── SettingsScreen.kt   # Settings screen: restart-track-on-previous toggle (DataStore-backed via LibraryPreferences)
+    │   ├── AboutScreen.kt      # About screen: app name/version/copyright/license/logo notice
     │   ├── LibraryScreen.kt     # unified Library tab: in-screen back stack (Home→Section→DrillDown / Home→PlaylistDetail); Playlists rows (Favorites first, undeletable) + FAB create + PlaylistDetail (cover header, add-from-library sheet, pick-files, resolved track rows w/ grayed unavailable state + three-dot remove/add-to-playlist/favorite) + Video/Audio entry rows; per-section view-mode/group-by; artist/album directory cards; disc-aware album drill-down
     │   ├── AudioScreen.kt       # (removed — merged into LibraryScreen)
     │   ├── VideoScreen.kt       # (removed — merged into LibraryScreen)

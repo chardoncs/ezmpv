@@ -7,6 +7,7 @@ import androidx.core.content.ContextCompat
 import dev.chardoncs.ezmpv.audio.ArtCache
 import dev.chardoncs.ezmpv.audio.FileCopyCache
 import dev.chardoncs.ezmpv.audio.FolderRepository
+import dev.chardoncs.ezmpv.audio.LibraryPreferences
 import dev.chardoncs.ezmpv.browse.BookmarkRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,7 +23,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class PlayerController(private val app: Context, val bookmarks: BookmarkRepository) {
+class PlayerController(
+    private val app: Context,
+    val bookmarks: BookmarkRepository,
+    val prefs: LibraryPreferences,
+) {
 
     private val folderRepo = FolderRepository(app)
     private val artCache = ArtCache(app)
@@ -41,8 +46,13 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
     private var serviceStarted = false
     private var loadJob: Job? = null
     private var unshuffledPlaylist: List<MediaItem>? = null
+    @Volatile
+    private var restartOnPrevious = false
 
     init {
+        scope.launch {
+            prefs.restartOnPrevious().collect { restartOnPrevious = it }
+        }
         scope.launch {
             bookmarks.bookmarks.collect { list ->
                 _state.update { it.copy(selectedFolders = list.map { b -> b.uri }) }
@@ -229,6 +239,10 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
 
     fun previous() {
         val s = _state.value
+        if (restartOnPrevious && s.positionMs > 3_000) {
+            seekTo(0)
+            return
+        }
         val target = indexForSkip(s.playSequence, s.playlist.size, s.currentIndex, forward = false)
             ?: return
         selectTrack(target)
