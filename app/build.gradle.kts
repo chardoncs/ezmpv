@@ -45,6 +45,11 @@ android {
 }
 
 dependencies {
+    if (project.hasProperty("useLocalLibmpv")) {
+        implementation(files("libs/libmpv.aar"))
+    } else {
+        implementation(libs.dev.jdtech.mpv.libmpv)
+    }
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
@@ -59,7 +64,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.window)
-    implementation(libs.dev.jdtech.mpv.libmpv)
     implementation(libs.androidx.documentfile)
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.androidx.media3.session)
