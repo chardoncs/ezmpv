@@ -1,0 +1,10 @@
+Initial release of ezmpv.
+
+- libmpv-based audio and video playback
+- Background playback with media-session controls
+- Mini player and full Now Playing screen with shared-element morph
+- User playlists and Favorites
+- Library tab scanning bookmarked folders, organized by artist/album/year
+- Browse tab with SAF file browser and bookmarks
+- Audio-only mode for video
+- Play-sequence modes including shuffle and Casino (true random)

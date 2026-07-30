@@ -1,0 +1,18 @@
+<p>ezmpv is a media player for Android aiming to provide better user interface as an mpv-based app.
+It's built on top of libmpv through libmpv-android.</p>
+
+<p>It plays both audio and video from your local files, with no ads, no tracking, and no network services.</p>
+
+<p>Features:</p>
+
+<ul>
+<li>Powered by libmpv (mpv's client API) for reliable, high-quality playback</li>
+<li>Play audio and video files stored on your device</li>
+<li>Background playback with a media-session notification for lockscreen and Bluetooth controls</li>
+<li>Mini player with a live video preview that expands into a full Now Playing screen</li>
+<li>User-created playlists, with a special Favorites playlist</li>
+<li>Browse local files and bookmark folders to feed your library</li>
+<li>Library tab that scans your bookmarked folders and organizes music by artist, album, or year (disc-aware album drill-down)</li>
+<li>Audio-only mode for video files, for listening without decoding video</li>
+<li>Play-sequence modes: sequence, loop, single loop, shuffle, shuffle loop, and a true-random "Casino" mode</li>
+</ul>
