@@ -42,7 +42,7 @@ class PlaylistRepository(private val context: Context) {
         if (current.none { it.id == FAVORITES_PLAYLIST_ID }) {
             write(current + Playlist(
                 id = FAVORITES_PLAYLIST_ID,
-                name = "Favorites",
+                name = "",
                 isFavorites = true,
                 createdAt = System.currentTimeMillis(),
             ))

@@ -22,10 +22,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.chardoncs.ezmpv.R
 import dev.chardoncs.ezmpv.playlists.Playlist
+import dev.chardoncs.ezmpv.playlists.displayName
 
 @Composable
 fun AddToPlaylistDialog(
@@ -34,6 +36,7 @@ fun AddToPlaylistDialog(
     onAddTo: (playlistId: String) -> Unit,
 ) {
     var selected by remember { mutableStateOf(setOf<String>()) }
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.playlist_add_to)) },
@@ -62,7 +65,7 @@ fun AddToPlaylistDialog(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = pl.name,
+                                text = pl.displayName(context),
                                 style = MaterialTheme.typography.bodyLarge,
                                 modifier = Modifier
                                     .weight(1f)

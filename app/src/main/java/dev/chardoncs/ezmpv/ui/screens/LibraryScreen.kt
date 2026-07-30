@@ -85,6 +85,7 @@ import dev.chardoncs.ezmpv.player.PlayerState
 import dev.chardoncs.ezmpv.playlists.Playlist
 import dev.chardoncs.ezmpv.playlists.ResolvedEntry
 import dev.chardoncs.ezmpv.playlists.ResolvedPlaylist
+import dev.chardoncs.ezmpv.playlists.displayName
 import dev.chardoncs.ezmpv.playlists.toMediaItem
 import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
 import dev.chardoncs.ezmpv.ui.components.LibraryTrackPickerSheet
@@ -199,8 +200,8 @@ fun LibraryScreen(
         is LibraryScreen.Home -> "Library"
         is LibraryScreen.Section -> if (current.type == LibraryType.AUDIO) "Audio" else "Video"
         is LibraryScreen.DrillDown -> current.groupKey
-        is LibraryScreen.PlaylistDetail -> playlists.firstOrNull { it.id == current.playlistId }?.name
-            ?: "Playlist"
+        is LibraryScreen.PlaylistDetail -> playlists.firstOrNull { it.id == current.playlistId }
+            ?.let { it.displayName(context) } ?: "Playlist"
     }
 
     Scaffold(
@@ -329,7 +330,7 @@ fun LibraryScreen(
     }
     renameTarget?.let { pl ->
         PlaylistEditDialog(
-            initialName = pl.name,
+            initialName = pl.displayName(context),
             initialDescription = pl.description,
             title = stringResource(R.string.playlist_rename),
             confirmLabel = stringResource(R.string.playlist_save),
@@ -370,6 +371,7 @@ private fun LibraryHome(
     onOpenPlaylist: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     LazyColumn(modifier = modifier.fillMaxSize()) {
         item(key = "playlists_header") {
             SectionHeader("Playlists")
@@ -387,7 +389,7 @@ private fun LibraryHome(
             val ordered = playlists.sortedWith(
                 compareBy(
                     { !it.isFavorites },
-                    { it.name.lowercase() },
+                    { it.displayName(context).lowercase() },
                 ),
             )
             items(ordered, key = { it.id }) { pl ->
@@ -428,6 +430,7 @@ private fun PlaylistRow(
     controller: PlayerController,
     onClick: () -> Unit,
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -444,7 +447,7 @@ private fun PlaylistRow(
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = playlist.name,
+                text = playlist.displayName(context),
                 style = MaterialTheme.typography.bodyLarge,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -481,15 +484,17 @@ private fun PlaylistDetailActions(
             Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.cd_more_actions))
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.playlist_rename)) },
-                onClick = { menuOpen = false; onRename() },
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.playlist_change_cover)) },
-                onClick = { menuOpen = false; onChangeCover() },
-            )
-            if (playlist.coverImageUri != null && !playlist.isFavorites) {
+            if (!playlist.isFavorites) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.playlist_rename)) },
+                    onClick = { menuOpen = false; onRename() },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.playlist_change_cover)) },
+                    onClick = { menuOpen = false; onChangeCover() },
+                )
+            }
+            if (playlist.coverImageUri != null) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.playlist_clear_cover)) },
                     onClick = { menuOpen = false; onClearCover() },

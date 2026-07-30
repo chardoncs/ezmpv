@@ -1,6 +1,8 @@
 package dev.chardoncs.ezmpv.playlists
 
+import android.content.Context
 import android.net.Uri
+import dev.chardoncs.ezmpv.R
 import dev.chardoncs.ezmpv.browse.UriSerializer
 import dev.chardoncs.ezmpv.player.MediaItem
 import kotlinx.serialization.Serializable
@@ -62,3 +64,6 @@ data class Playlist(
 )
 
 const val FAVORITES_PLAYLIST_ID = "favorites"
+
+fun Playlist.displayName(context: Context): String =
+    if (isFavorites) context.getString(R.string.playlist_favorites_name) else name

@@ -83,6 +83,7 @@
     <string name="playlist_favorite">Favorite</string>
     <string name="playlist_unfavorite">Unfavorite</string>
     <string name="playlist_favorites_cover">Favorites cover</string>
+    <string name="playlist_favorites_name">Favorites</string>
     <string name="playlist_no_playlists">No playlists</string>
     <string name="playlist_done">Done</string>
     <string name="cd_favorite">Favorite</string>
