@@ -24,9 +24,30 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb logcat -s mpv
 ```
 
-There is **no native build step** — libmpv + ffmpeg + the JNI shim ship inside the
-Maven AAR. Do NOT clone mpv-android or run `buildscripts/buildall.sh`; that path was
-explored and abandoned in favor of the AAR.
+Local/dev builds consume `dev.jdtech.mpv:libmpv:1.0.0` from Maven Central — no native
+build step. (The F-Droid build instead builds libmpv from source via the
+`libmpv-android` srclib + `useLocalLibmpv` Gradle property — see "F-Droid build
+properties" below.) Do NOT clone mpv-android or run `buildscripts/buildall.sh` for local
+builds; that path was explored and abandoned in favor of the AAR.
+
+## ABIs and F-Droid build properties
+
+The app ships **arm64-v8a** and **x86_64** (covers modern phones + Chromebooks; 32-bit
+ARM/x86 are intentionally omitted). `app/build.gradle.kts` drives packaging via two
+Gradle properties so the same source produces either a universal dev APK or per-ABI
+F-Droid APKs:
+
+- `-PtargetAbi=<abi>` — restrict `abiFilters` to one ABI. Default (no property): both
+  `arm64-v8a` and `x86_64` (universal APK for local/dev convenience).
+- `-PabiVercodeSuffix=<n>` — set `versionCode = base*10 + n` (F-Droid ABI-split
+  convention: arm64=1, x86_64=4). Default/0: `versionCode` stays at `baseVersionCode`
+  (1), so local builds are unaffected.
+- `-PuseLocalLibmpv` — swap the Maven AAR for `app/libs/libmpv.aar` (F-Droid build places
+  a source-built AAR there; the file is gitignored and absent in local builds).
+
+F-Droid metadata uses `VercodeOperation` (`10*%c+1`, `10*%c+4`) to generate one build
+block per ABI; x86_64's versionCode must stay higher than arm64's so clients upgrade
+correctly across architectures.
 
 ## Project layout
 

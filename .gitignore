@@ -17,3 +17,6 @@ local.properties
 # Native build artifacts (libmpv + ffmpeg + libplayer) built via mpv-android buildscripts
 /app/src/main/jniLibs/
 /app/src/main/obj/
+
+# Source-built AAR placed by F-Droid build (useLocalLibmpv)
+/app/libs/

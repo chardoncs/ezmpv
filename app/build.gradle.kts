@@ -17,14 +17,19 @@ android {
         minSdk = 29
         //noinspection OldTargetApi
         targetSdk = 36
-        versionCode = 1
+        val baseVersionCode = 1
+        val abiSuffix = (project.findProperty("abiVercodeSuffix") as String?)?.toInt() ?: 0
+        versionCode = if (abiSuffix == 0) baseVersionCode else baseVersionCode * 10 + abiSuffix
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            //noinspection ChromeOsAbiSupport
-            abiFilters += "arm64-v8a"
+            val targetAbi = project.findProperty("targetAbi") as String?
+            abiFilters += when (targetAbi) {
+                null -> listOf("arm64-v8a", "x86_64")
+                else -> listOf(targetAbi)
+            }
         }
     }
 
