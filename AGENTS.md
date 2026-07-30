@@ -24,6 +24,44 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb logcat -s mpv
 ```
 
+### Signed release builds
+
+Release APKs are signed by a `signingConfigs.release` block in `app/build.gradle.kts`
+that reads four secrets from Gradle properties (falling back to env vars):
+
+- `EZMPV_KEYSTORE` — path to the keystore, resolved against the repo root via
+  `rootProject.file(...)` (so `release.jks` at the repo root works). Gitignored.
+- `EZMPV_KEYSTORE_PASSWORD`, `EZMPV_KEY_ALIAS`, `EZMPV_KEY_PASSWORD` — credentials.
+
+Credentials must live in `~/.gradle/gradle.properties` (machine-local, picked up by
+both Android Studio and CLI) or a gitignored `.env` at the repo root (sourced with
+`set -a; . ./.env; set +a`). Never commit secrets. `*.keystore`, `*.jks`, and `.env`
+are all in `.gitignore`.
+
+Per-ABI signed release APKs (each build overwrites `app-release.apk`, so copy/rename
+between builds if you need both on disk at once):
+
+```sh
+set -a; . ./.env; set +a
+./gradlew :app:assembleRelease -PtargetAbi=arm64-v8a -PabiVercodeSuffix=1   # versionCode 11
+cp app/build/outputs/apk/release/app-release.apk app-arm64-v8a-release.apk
+./gradlew :app:assembleRelease -PtargetAbi=x86_64 -PabiVercodeSuffix=4       # versionCode 14
+cp app/build/outputs/apk/release/app-release.apk app-x86_64-release.apk
+# Universal (both ABIs, versionCode 1):
+./gradlew :app:assembleRelease
+```
+
+`apksigner` verifies the signature (v2 scheme):
+```sh
+$ANDROID_HOME/build-tools/<ver>/apksigner verify --verbose --print-certs \
+  app/build/outputs/apk/release/app-release.apk
+```
+
+In Android Studio: select the `release` build variant in **Build Variants**, then
+**Build > Build Bundle(s)/APK(s) > Build APK(s)** (credentials flow in from
+`~/.gradle/gradle.properties`). For per-ABI splits, add `-PtargetAbi=… -PabiVercodeSuffix=…`
+to an `assembleRelease` Run Configuration in the Gradle tool window.
+
 Local/dev builds consume `dev.jdtech.mpv:libmpv:1.0.0` from Maven Central — no native
 build step. (The F-Droid build instead builds libmpv from source via the
 `libmpv-android` srclib + `useLocalLibmpv` Gradle property — see "F-Droid build

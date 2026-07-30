@@ -20,3 +20,10 @@ local.properties
 
 # Source-built AAR placed by F-Droid build (useLocalLibmpv)
 /app/libs/
+
+# Release signing keystores (credentials live in ~/.gradle/gradle.properties)
+*.keystore
+*.jks
+
+# Local env file with signing credentials (source it before building: `set -a; . ./.env; set +a`)
+.env

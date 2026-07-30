@@ -33,8 +33,22 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = (providers.gradleProperty("EZMPV_KEYSTORE").orNull
+                ?: System.getenv("EZMPV_KEYSTORE"))?.let { rootProject.file(it) }
+            storePassword = providers.gradleProperty("EZMPV_KEYSTORE_PASSWORD").orNull
+                ?: System.getenv("EZMPV_KEYSTORE_PASSWORD")
+            keyAlias = providers.gradleProperty("EZMPV_KEY_ALIAS").orNull
+                ?: System.getenv("EZMPV_KEY_ALIAS")
+            keyPassword = providers.gradleProperty("EZMPV_KEY_PASSWORD").orNull
+                ?: System.getenv("EZMPV_KEY_PASSWORD")
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = false
             }
