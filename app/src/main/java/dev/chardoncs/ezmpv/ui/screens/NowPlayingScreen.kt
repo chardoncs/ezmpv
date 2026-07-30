@@ -343,6 +343,14 @@ private fun LandscapeNowPlayingScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
+                                IconButton(
+                                    onClick = onBack,
+                                    colors = IconButtonDefaults.iconButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
+                                    ),
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                }
                                 Text(
                                     text = currentTrack?.title ?: "Now Playing",
                                     style = MaterialTheme.typography.titleLarge,
@@ -366,26 +374,10 @@ private fun LandscapeNowPlayingScreen(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(start = 48.dp),
                                 )
                             }
                         }
-                    }
-                }
-            }
-            Box(modifier = Modifier.align(Alignment.TopStart)) {
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = controlsVisible,
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                ) {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier.padding(8.dp),
-                        colors = IconButtonDefaults.iconButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             }
