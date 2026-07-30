@@ -195,7 +195,27 @@ Load a skill with the `skill` tool before doing work it covers.
 
 ## Roadmap (not yet implemented)
 
-What's done: app shell, M3 dynamic theme, three-tab navigation (Browse / Library / More), unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls, mini player (with live video preview) + persistent animated Now Playing overlay, portrait and landscape Now Playing layouts (including landscape right-side playlist, compact controls, auto-hiding overlays, system-bar handling, and a portrait aux toolbar + landscape aux/menu for favorite/add-to-playlist), screen-awake behavior for active foreground video playback, unified Library tab (Playlists + Video + Audio sections with per-section persistent list/grid + group-by; audio artist/album shown as directory cards with cover art; disc-aware album drill-down) with scan-time metadata enrichment (incl. disc/track number) + DataStore cache, user playlists (`PlaylistRepository`/`PlaylistController`: create/rename/delete, cover image or auto 2×2 art grid, Favorites special playlist, add from library sheet + system file picker, add-to-playlist + favorite from FileBrowser and Now Playing, resolved availability with grayed unavailable rows that self-heal on rescan), VLC-style animated play/pause icon, play-sequence modes (Sequence / Loop / Single loop / Shuffle / Shuffle loop / Casino with queue reordering + restore on shuffle exit, end-of-track + manual prev/next both mode-aware, long-press mode picker), Browse tab with bookmarks (DataStore-persisted; add/remove via SAF OpenDocumentTree) + SAF file-browser (in-screen directory back stack, per-item context sheet: play folder / folder+subfolders / append / play-next / add-to-playlist / favorite / bookmark / info) + long-press multi-select (select all / play all / append / play-next / add-to-playlist / add-to-bookmarks / delete). The Library is the union of media scanned from every bookmarked folder (Library tab has no folder-grant UI; adding a bookmark in Browse is the only way to feed the library).
+What's done:
+
+- App shell
+- M3 dynamic theme
+- Three-tab navigation (Browse / Library / More)
+- Unified shared `Player` + `PlayerService` (Media3 `MediaSessionService` + `SimpleBasePlayer` adapter) for background playback with notification/lockscreen/BT controls
+- Mini player (with live video preview) + persistent animated Now Playing overlay
+- Portrait and landscape Now Playing layouts (including landscape right-side playlist
+- Compact controls, auto-hiding overlays, system-bar handling, and a portrait aux toolbar + landscape aux/menu for favorite/add-to-playlist)
+- Screen-awake behavior for active foreground video playback
+- Unified Library tab (Playlists + Video + Audio sections with per-section persistent list/grid + group-by; audio artist/album shown as directory cards with cover art; disc-aware album drill-down) with scan-time metadata enrichment (incl. disc/track number) + DataStore cache
+- User playlists (`PlaylistRepository`/`PlaylistController`: create/rename/delete
+- Cover image or auto 2×2 art grid
+- Favorites special playlist
+- Add from library sheet + system file picker
+- Add-to-playlist + favorite from FileBrowser and Now Playing
+- Resolved availability with grayed unavailable rows that self-heal on rescan)
+- VLC-style animated play/pause icon
+- Play-sequence modes (Sequence / Loop / Single loop / Shuffle / Shuffle loop / Casino with queue reordering + restore on shuffle exit, end-of-track + manual prev/next both mode-aware, long-press mode picker)
+- Browse tab with bookmarks (DataStore-persisted; add/remove via SAF OpenDocumentTree) + SAF file-browser (in-screen directory back stack, per-item context sheet: play folder / folder+subfolders / append / play-next / add-to-playlist / favorite / bookmark / info) + long-press multi-select (select all / play all / append / play-next / add-to-playlist / add-to-bookmarks / delete)
+- The Library is the union of media scanned from every bookmarked folder (Library tab has no folder-grant UI; adding a bookmark in Browse is the only way to feed the library).
 
 What's next (each is a separate iteration — don't try to do everything at once):
 
