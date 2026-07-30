@@ -31,7 +31,7 @@ class FolderRepository(private val context: Context) {
         out
     }
 
-    private suspend fun enrich(item: MediaItem): MediaItem {
+    suspend fun enrich(item: MediaItem): MediaItem {
         metadataCache.get(item)?.let { return it }
         val enriched = loadMetadata(item) ?: item
         metadataCache.put(enriched)

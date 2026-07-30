@@ -110,19 +110,7 @@ class PlaylistController(
     fun addMediaItems(id: String, items: List<MediaItem>) {
         if (items.isEmpty()) return
         scope.launch {
-            val enriched = items.map { item ->
-                playerController.loadMetadata(item)?.let { meta ->
-                    item.copy(
-                        title = meta.title,
-                        artist = meta.artist,
-                        album = meta.album,
-                        durationMs = meta.durationMs,
-                        year = meta.year,
-                        discNumber = meta.discNumber,
-                        trackNumber = meta.trackNumber,
-                    )
-                } ?: item
-            }
+            val enriched = items.map { item -> playerController.enrichItem(item) }
             repo.addEntries(id, enriched.map { it.toPlaylistEntry() })
         }
     }
@@ -136,8 +124,10 @@ class PlaylistController(
     }
 
     fun toggleFavorite(item: MediaItem, onResult: (Boolean) -> Unit = {}) {
-        val entry = item.toPlaylistEntry()
-        scope.launch { onResult(repo.toggleFavorite(entry)) }
+        scope.launch {
+            val enriched = playerController.enrichItem(item)
+            onResult(repo.toggleFavorite(enriched.toPlaylistEntry()))
+        }
     }
 
     fun isFavorite(uri: Uri): Boolean =

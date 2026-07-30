@@ -210,6 +210,8 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
 
     suspend fun loadMetadata(item: MediaItem): MediaItem? = folderRepo.loadMetadata(item)
 
+    suspend fun enrichItem(item: MediaItem): MediaItem = folderRepo.enrich(item)
+
     fun togglePlayPause() = player.playPause()
 
     fun setPlaying(play: Boolean) {
