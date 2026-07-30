@@ -27,3 +27,6 @@ local.properties
 
 # Local env file with signing credentials (source it before building: `set -a; . ./.env; set +a`)
 .env
+
+# Signed release APKs staged by `make release-*`
+/release/

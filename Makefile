@@ -7,20 +7,23 @@ GRADLE       ?= ./gradlew
 BUILD_TOOLS   = $(firstword $(wildcard $(ANDROID_HOME)/build-tools/*/apksigner) $(firstword $(wildcard $(ANDROID_SDK_ROOT)/build-tools/*/apksigner)))
 APK_DIR      = app/build/outputs/apk/release
 APK_NAME     = app-release.apk
-APK_ARM64    = app-arm64-v8a-release.apk
-APK_X86_64   = app-x86_64-release.apk
-
-# Source .env if present (exports EZMPV_KEYSTORE* into the environment).
-ENV_LOADED := $(if $(wildcard .env),$(eval -include $(shell set -a; . ./.env; set +a >/dev/null 2>&1)),)
+VERSION      = $(shell awk -F'"' '/versionName =/ {print $$2}' app/build.gradle.kts)
+APK_ARM64    = ezmpv-$(VERSION)-arm64-v8a.apk
+APK_X86_64   = ezmpv-$(VERSION)-x86_64.apk
+APK_UNIVERSAL = ezmpv-$(VERSION)-universal.apk
+# Copy signed APKs here so a subsequent ABI build's packageRelease task
+# (which cleans APK_DIR) doesn't clobber prior outputs.
+OUT_DIR      = release
 
 # Build one ABI's signed release APK (overwrites app-release.apk each time).
-# After the build, copy/rename it so a subsequent ABI build doesn't clobber it.
+# After the build, copy/rename it to OUT_DIR so a subsequent ABI build doesn't clobber it.
 define build_abi
 	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
 	echo "===> Building $1 release APK (versionCode $2)"; \
 	$(GRADLE) :app:assembleRelease -PtargetAbi=$1 -PabiVercodeSuffix=$2; \
-	cp -f $(APK_DIR)/$(APK_NAME) $(APK_DIR)/$(APK_OUT); \
-	echo "===> $(APK_DIR)/$(APK_OUT) ready"
+	mkdir -p $(OUT_DIR); \
+	cp -f $(APK_DIR)/$(APK_NAME) $(OUT_DIR)/$(APK_OUT); \
+	echo "===> $(OUT_DIR)/$(APK_OUT) ready"
 endef
 
 release-arm64: APK_OUT := $(APK_ARM64)
@@ -34,14 +37,16 @@ release-x86_64:
 # Build both ABI APKs in one invocation (arm64 first, then x86_64).
 release-all: release-arm64 release-x86_64
 	@echo "===> All ABI release APKs:"; \
-	ls -l $(APK_DIR)/$(APK_ARM64) $(APK_DIR)/$(APK_X86_64)
+	ls -l $(OUT_DIR)/$(APK_ARM64) $(OUT_DIR)/$(APK_X86_64)
 
-# Universal APK (both ABIs, versionCode 1). Leaves app-release.apk as-is.
+# Universal APK (both ABIs, versionCode 1). Renamed to ezmpv-<version>-universal.apk.
 release-universal:
 	@if [ -f .env ]; then set -a; . ./.env; set +a; fi; \
 	echo "===> Building universal release APK (versionCode 1)"; \
 	$(GRADLE) :app:assembleRelease
-	@echo "===> $(APK_DIR)/$(APK_NAME) ready"
+	mkdir -p $(OUT_DIR); \
+	cp -f $(APK_DIR)/$(APK_NAME) $(OUT_DIR)/$(APK_UNIVERSAL)
+	@echo "===> $(OUT_DIR)/$(APK_UNIVERSAL) ready"
 
 # Debug build + install helpers.
 debug:
@@ -51,13 +56,13 @@ debug-install:
 	$(GRADLE) :app:assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 install-arm64: release-arm64
-	adb install -r $(APK_DIR)/$(APK_ARM64)
+	adb install -r $(OUT_DIR)/$(APK_ARM64)
 
 install-x86_64: release-x86_64
-	adb install -r $(APK_DIR)/$(APK_X86_64)
+	adb install -r $(OUT_DIR)/$(APK_X86_64)
 
 install-universal: release-universal
-	adb install -r $(APK_DIR)/$(APK_NAME)
+	adb install -r $(OUT_DIR)/$(APK_UNIVERSAL)
 
 # Verify APK signatures with apksigner (auto-detected from the SDK).
 define verify_apk
@@ -68,18 +73,18 @@ define verify_apk
 endef
 
 verify-arm64: release-arm64
-	$(call verify_apk,$(APK_DIR)/$(APK_ARM64))
+	$(call verify_apk,$(OUT_DIR)/$(APK_ARM64))
 
 verify-x86_64: release-x86_64
-	$(call verify_apk,$(APK_DIR)/$(APK_X86_64))
+	$(call verify_apk,$(OUT_DIR)/$(APK_X86_64))
 
 verify-universal: release-universal
-	$(call verify_apk,$(APK_DIR)/$(APK_NAME))
+	$(call verify_apk,$(OUT_DIR)/$(APK_UNIVERSAL))
 
 # Convenience targets.
 lint:
 	$(GRADLE) :app:lint
 
-# Remove built release APKs only (keeps debug + intermediate build cache).
+# Remove built release APKs (staging dir + gradle output dir).
 clean-signing:
-	rm -f $(APK_DIR)/$(APK_ARM64) $(APK_DIR)/$(APK_X86_64) $(APK_DIR)/$(APK_NAME)
+	rm -f $(OUT_DIR)/$(APK_ARM64) $(OUT_DIR)/$(APK_X86_64) $(OUT_DIR)/$(APK_UNIVERSAL) $(APK_DIR)/$(APK_NAME)

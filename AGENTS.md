@@ -38,15 +38,27 @@ both Android Studio and CLI) or a gitignored `.env` at the repo root (sourced wi
 `set -a; . ./.env; set +a`). Never commit secrets. `*.keystore`, `*.jks`, and `.env`
 are all in `.gitignore`.
 
-Per-ABI signed release APKs (each build overwrites `app-release.apk`, so copy/rename
-between builds if you need both on disk at once):
+Per-ABI signed release APKs are produced by the `Makefile` (sources `.env`
+automatically, copies each build to the gitignored `release/` staging dir so a
+subsequent ABI build's `packageRelease` task doesn't clobber prior outputs):
+
+```sh
+make release-all        # arm64-v8a + x86_64 → release/ezmpv-<version>-<abi>.apk
+make release-universal  # both ABIs, versionCode 1 → release/ezmpv-<version>-universal.apk
+make verify-arm64       # build + apksigner verify
+make install-x86_64     # build + adb install -r
+```
+
+Outputs are named `ezmpv-<versionName>-<abi>.apk` (e.g. `ezmpv-0.1.0-arm64-v8a.apk`)
+for GitHub Release uploads. The `<versionName>` is read from `app/build.gradle.kts`
+by the Makefile. The underlying gradle commands (for manual/CI use):
 
 ```sh
 set -a; . ./.env; set +a
 ./gradlew :app:assembleRelease -PtargetAbi=arm64-v8a -PabiVercodeSuffix=1   # versionCode 11
-cp app/build/outputs/apk/release/app-release.apk app-arm64-v8a-release.apk
+cp app/build/outputs/apk/release/app-release.apk release/ezmpv-0.1.0-arm64-v8a.apk
 ./gradlew :app:assembleRelease -PtargetAbi=x86_64 -PabiVercodeSuffix=4       # versionCode 14
-cp app/build/outputs/apk/release/app-release.apk app-x86_64-release.apk
+cp app/build/outputs/apk/release/app-release.apk release/ezmpv-0.1.0-x86_64.apk
 # Universal (both ABIs, versionCode 1):
 ./gradlew :app:assembleRelease
 ```
@@ -54,7 +66,7 @@ cp app/build/outputs/apk/release/app-release.apk app-x86_64-release.apk
 `apksigner` verifies the signature (v2 scheme):
 ```sh
 $ANDROID_HOME/build-tools/<ver>/apksigner verify --verbose --print-certs \
-  app/build/outputs/apk/release/app-release.apk
+  release/ezmpv-0.1.0-arm64-v8a.apk
 ```
 
 In Android Studio: select the `release` build variant in **Build Variants**, then
@@ -86,6 +98,40 @@ F-Droid APKs:
 F-Droid metadata uses `VercodeOperation` (`10*%c+1`, `10*%c+4`) to generate one build
 block per ABI; x86_64's versionCode must stay higher than arm64's so clients upgrade
 correctly across architectures.
+
+## F-Droid submission
+
+ezmpv is intended for F-Droid. The app is **non-reproducible** on F-Droid (Path A):
+F-Droid builds `libmpv` from source via the `libmpv-android` srclib and signs its own
+APKs with the F-Droid key; the GitHub Release APKs (signed with `release.jks` above)
+are independent builds for direct distribution. Reproducible builds were considered but
+rejected because the source-built native `libmpv` `.so`s are unlikely to match
+byte-for-byte across the F-Droid build server and a developer machine (the F-Droid docs
+flag native code as the hardest reproducibility case). Non-reproducible is fully
+accepted by F-Droid.
+
+The F-Droid build recipe (`metadata/dev.chardoncs.ezmpv.yml`) lives in the
+[fdroiddata](https://gitlab.com/fdroid/fdroiddata) repo, not this one — submit it via a
+merge request there. Key recipe points:
+
+- `Repo: https://github.com/chardoncs/ezmpv`, `RepoType: git`,
+  `License: GPL-3.0-or-later`.
+- Two `Builds` blocks (one per ABI), each `commit: v<versionName>` (a git tag),
+  `subdir: app`, `output: build/outputs/apk/release/app-release.apk`, with
+  `gradleprops: [targetAbi=<abi>, abiVercodeSuffix=<n>, useLocalLibmpv]` and a
+  `srclibs: [libmpv-android@<ref>]` + `prebuild` that builds the AAR from source and
+  places it at `app/libs/libmpv.aar`.
+- `VercodeOperation: [10*%c+1, 10*%c+4]` matches the in-app convention
+  (arm64=1, x86_64=4).
+- `AutoUpdateMode: Version` + `UpdateCheckMode: Tags` → tag releases `v<versionName>`
+  (e.g. `v0.1.0`) and F-Droid auto-bumps.
+- Descriptions/screenshots/icon are auto-pulled from `fastlane/metadata/android/en-US/`
+  (present in this repo).
+
+Release tagging: every release commit must carry an annotated git tag `v<versionName>`
+matching `versionName` in `app/build.gradle.kts`, on a clean tree (no local changes),
+built after tagging. This is required for `AutoUpdateMode: Version` and for F-Droid's
+build to pin to the exact release commit.
 
 ## Project layout
 
