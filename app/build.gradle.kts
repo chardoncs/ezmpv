@@ -63,6 +63,10 @@ android {
     }
 }
 
+configurations.all {
+    exclude(group = "io.opencensus")
+}
+
 dependencies {
     if (project.hasProperty("useLocalLibmpv")) {
         implementation(files("libs/libmpv.aar"))
