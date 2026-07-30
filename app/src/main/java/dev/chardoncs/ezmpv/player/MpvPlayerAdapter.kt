@@ -92,6 +92,8 @@ class MpvPlayerAdapter(
                     if (duration > 0) position.coerceAtMost(duration) else position
                 }
             )
+            COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> controller.next()
+            COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> controller.previous()
             else -> if (mediaItemIndex != C.INDEX_UNSET && mediaItemIndex != current) {
                 controller.selectTrack(mediaItemIndex)
             } else if (positionMs != C.TIME_UNSET) {

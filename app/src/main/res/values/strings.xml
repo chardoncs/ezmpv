@@ -88,4 +88,12 @@
     <string name="cd_favorite">Favorite</string>
     <string name="cd_add_to_playlist">Add to playlist</string>
     <string name="cd_playlist_cover">Playlist cover</string>
+
+    <string name="sequence_sequence">Sequence</string>
+    <string name="sequence_repeat_all">Loop</string>
+    <string name="sequence_repeat_one">Single loop</string>
+    <string name="sequence_shuffle">Shuffle</string>
+    <string name="sequence_shuffle_repeat">Shuffle loop</string>
+    <string name="sequence_casino">Casino</string>
+    <string name="cd_play_sequence">Play sequence</string>
 </resources>

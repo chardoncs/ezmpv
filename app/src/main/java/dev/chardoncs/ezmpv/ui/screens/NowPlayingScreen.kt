@@ -11,11 +11,11 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,14 +27,21 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.RepeatOne
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -72,7 +79,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import dev.chardoncs.ezmpv.EzmpvApplication
 import dev.chardoncs.ezmpv.R
+import dev.chardoncs.ezmpv.player.MediaItem
 import dev.chardoncs.ezmpv.player.MpvSurface
+import dev.chardoncs.ezmpv.player.PlaySequence
 import dev.chardoncs.ezmpv.player.PlayerController
 import dev.chardoncs.ezmpv.player.PlayerState
 import dev.chardoncs.ezmpv.player.VideoSurfaceHost
@@ -241,6 +250,8 @@ private fun PortraitNowPlayingScreen(
                     onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
                     onToggleFavorite = { currentTrack?.let { playlistController.toggleFavorite(it) } },
                     onOpenDrawer = onOpenDrawer,
+                    onCyclePlaySequence = controller::cyclePlaySequence,
+                    onSetPlaySequence = controller::setPlaySequence,
                     isFavorite = isFav,
                     canFavorite = currentTrack != null,
                     showTrackInfo = !state.playlistVisible,
@@ -396,6 +407,8 @@ private fun LandscapeNowPlayingScreen(
                             onNext = controller::next,
                             onPrevious = controller::previous,
                             onTogglePlaylist = { controller.setPlaylistUserOverride(!state.playlistVisible) },
+                        onCyclePlaySequence = controller::cyclePlaySequence,
+                        onSetPlaySequence = controller::setPlaySequence,
                         compact = true,
                         showTrackInfo = false,
                     )
@@ -571,6 +584,8 @@ private fun Modifier.NowPlayingControls(
     onTogglePlaylist: () -> Unit = {},
     onToggleFavorite: () -> Unit = {},
     onOpenDrawer: () -> Unit = {},
+    onCyclePlaySequence: () -> Unit = {},
+    onSetPlaySequence: (PlaySequence) -> Unit = {},
     isFavorite: Boolean = false,
     canFavorite: Boolean = false,
     compact: Boolean = false,
@@ -659,10 +674,24 @@ private fun Modifier.NowPlayingControls(
             ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Spacer(modifier = Modifier.size(btnSize))
+            IconButton(
+                onClick = onTogglePlaylist,
+                modifier = Modifier.size(btnSize),
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.QueueMusic,
+                    contentDescription = stringResource(R.string.playlist_playlists),
+                    tint = if (state.playlistVisible) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             IconButton(
                 onClick = onPrevious,
-                enabled = state.currentIndex > 0,
+                enabled = state.playlist.size > 1 &&
+                    (state.currentIndex > 0 || sequenceWraps(state.playSequence)),
                 modifier = Modifier.size(btnSize),
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -694,7 +723,9 @@ private fun Modifier.NowPlayingControls(
             }
             IconButton(
                 onClick = onNext,
-                enabled = state.currentIndex in 0 until state.playlist.size - 1,
+                enabled = state.playlist.size > 1 &&
+                    (state.currentIndex in 0 until state.playlist.size - 1 ||
+                        sequenceWraps(state.playSequence)),
                 modifier = Modifier.size(btnSize),
                 colors = IconButtonDefaults.iconButtonColors(
                     contentColor = MaterialTheme.colorScheme.onSurface,
@@ -706,22 +737,112 @@ private fun Modifier.NowPlayingControls(
                     modifier = Modifier.size(glyphSize),
                 )
             }
-            IconButton(
-                onClick = onTogglePlaylist,
-                modifier = Modifier.size(btnSize),
-                colors = IconButtonDefaults.iconButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurface,
+            PlaySequenceButton(
+                mode = state.playSequence,
+                btnSize = btnSize,
+                onCycle = onCyclePlaySequence,
+                onSelect = onSetPlaySequence,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaySequenceButton(
+    mode: PlaySequence,
+    btnSize: androidx.compose.ui.unit.Dp,
+    onCycle: () -> Unit,
+    onSelect: (PlaySequence) -> Unit,
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+    val active = mode != PlaySequence.SEQUENCE
+    val tint = if (active) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant
+    Box {
+        Box(
+            modifier = Modifier
+                .size(btnSize)
+                .combinedClickable(
+                    onClick = onCycle,
+                    onLongClick = { menuExpanded = true },
                 ),
-            ) {
+            contentAlignment = Alignment.Center,
+        ) {
+            if (mode == PlaySequence.SHUFFLE_REPEAT) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.Shuffle,
+                        contentDescription = stringResource(R.string.cd_play_sequence),
+                        tint = tint,
+                    )
+                    Icon(
+                        Icons.Filled.Repeat,
+                        contentDescription = null,
+                        tint = tint,
+                        modifier = Modifier
+                            .size(14.dp)
+                            .align(Alignment.BottomEnd),
+                    )
+                }
+            } else {
                 Icon(
-                    Icons.AutoMirrored.Filled.QueueMusic,
-                    contentDescription = stringResource(R.string.playlist_playlists),
-                    tint = if (state.playlistVisible) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    when (mode) {
+                        PlaySequence.SEQUENCE -> Icons.AutoMirrored.Filled.PlaylistPlay
+                        PlaySequence.REPEAT_ALL -> Icons.Filled.Repeat
+                        PlaySequence.REPEAT_ONE -> Icons.Filled.RepeatOne
+                        PlaySequence.SHUFFLE -> Icons.Filled.Shuffle
+                        PlaySequence.CASINO -> Icons.Filled.Casino
+                        PlaySequence.SHUFFLE_REPEAT -> Icons.Filled.Shuffle
+                    },
+                    contentDescription = stringResource(R.string.cd_play_sequence),
+                    tint = tint,
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+            PlaySequence.entries.forEach { entry ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(entry.labelRes())) },
+                    onClick = {
+                        onSelect(entry)
+                        menuExpanded = false
+                    },
+                    leadingIcon = {
+                        Icon(
+                            when (entry) {
+                                PlaySequence.SEQUENCE -> Icons.AutoMirrored.Filled.PlaylistPlay
+                                PlaySequence.REPEAT_ALL -> Icons.Filled.Repeat
+                                PlaySequence.REPEAT_ONE -> Icons.Filled.RepeatOne
+                                PlaySequence.SHUFFLE -> Icons.Filled.Shuffle
+                                PlaySequence.CASINO -> Icons.Filled.Casino
+                                PlaySequence.SHUFFLE_REPEAT -> Icons.Filled.Shuffle
+                            },
+                            contentDescription = null,
+                            tint = if (entry == mode) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
                 )
             }
         }
     }
+}
+
+private fun sequenceWraps(mode: PlaySequence): Boolean =
+    mode == PlaySequence.REPEAT_ALL ||
+        mode == PlaySequence.SHUFFLE_REPEAT ||
+        mode == PlaySequence.CASINO
+
+private fun PlaySequence.labelRes(): Int = when (this) {
+    PlaySequence.SEQUENCE -> R.string.sequence_sequence
+    PlaySequence.REPEAT_ALL -> R.string.sequence_repeat_all
+    PlaySequence.REPEAT_ONE -> R.string.sequence_repeat_one
+    PlaySequence.SHUFFLE -> R.string.sequence_shuffle
+    PlaySequence.SHUFFLE_REPEAT -> R.string.sequence_shuffle_repeat
+    PlaySequence.CASINO -> R.string.sequence_casino
 }
 
 @Composable

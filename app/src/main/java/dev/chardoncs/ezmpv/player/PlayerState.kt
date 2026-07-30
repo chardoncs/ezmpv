@@ -17,6 +17,7 @@ data class PlayerState(
     val loading: Boolean = false,
     val error: String? = null,
     val playlistUserOverride: Boolean? = null,
+    val playSequence: PlaySequence = PlaySequence.SEQUENCE,
 )
 
 val PlayerState.playlistVisible: Boolean

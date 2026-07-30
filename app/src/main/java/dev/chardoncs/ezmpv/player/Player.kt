@@ -16,7 +16,7 @@ private const val MPV_EVENT_FILE_LOADED = 8
 
 class Player(private val context: Context) {
 
-    var onTrackEnd: ((Int?) -> Unit)? = null
+    var onTrackEnd: (() -> Unit)? = null
     private var eofHandled = false
     private var playbackEnded = false
     private var awaitingFileLoaded = false
@@ -133,6 +133,19 @@ class Player(private val context: Context) {
         _state.update { it.copy(playlist = items) }
     }
 
+    fun syncPlaylist(items: List<MediaItem>, currentIndex: Int) {
+        _state.update { it.copy(playlist = items, currentIndex = currentIndex) }
+    }
+
+    fun replay() {
+        val m = mpv ?: return
+        playbackEnded = false
+        eofHandled = false
+        m.command(arrayOf("seek", "0", "absolute"))
+        m.setPropertyBoolean("pause", false)
+        _state.update { it.copy(positionMs = 0, isPlaying = true) }
+    }
+
     fun playPause() {
         val m = mpv ?: return
         val paused = m.getPropertyBoolean("pause") ?: false
@@ -209,10 +222,8 @@ class Player(private val context: Context) {
         if (eofHandled) return
         eofHandled = true
         playbackEnded = true
-        val current = _state.value
-        val next = current.currentIndex + 1
         mpv?.setPropertyBoolean("pause", true)
         _state.update { it.copy(isPlaying = false) }
-        onTrackEnd?.invoke(next.takeIf { it in current.playlist.indices })
+        onTrackEnd?.invoke()
     }
 }

@@ -30,9 +30,7 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
     private val metadataCache = dev.chardoncs.ezmpv.audio.MetadataCache(app)
 
     val player = Player(app).apply {
-        onTrackEnd = { nextIndex ->
-            nextIndex?.let(::selectTrack)
-        }
+        onTrackEnd = { advanceOnTrackEnd() }
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -42,6 +40,7 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
 
     private var serviceStarted = false
     private var loadJob: Job? = null
+    private var unshuffledPlaylist: List<MediaItem>? = null
 
     init {
         scope.launch {
@@ -87,6 +86,7 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
         player.start()
         loadJob?.cancel()
         loadJob = scope.launch {
+            unshuffledPlaylist = null
             _state.update {
                 it.copy(playlist = library, currentIndex = index, loading = true)
             }
@@ -100,6 +100,7 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
         player.start()
         loadJob?.cancel()
         loadJob = scope.launch {
+            unshuffledPlaylist = null
             _state.update { it.copy(loading = true) }
             val items = folderRepo.listMedia(folderUri, recursive)
             if (items.isEmpty()) {
@@ -118,6 +119,7 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
         ensureServiceStarted()
         player.start()
         val newPlaylist = _state.value.playlist + items
+        unshuffledPlaylist = unshuffledPlaylist?.plus(items)
         _state.update { it.copy(playlist = newPlaylist) }
         player.setPlaylist(newPlaylist)
     }
@@ -132,6 +134,10 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
             current.playlist.toMutableList().also { it.addAll(idx + 1, items) }
         } else {
             items
+        }
+        unshuffledPlaylist = unshuffledPlaylist?.let { base ->
+            if (idx in base.indices) base.toMutableList().also { it.addAll(idx + 1, items) }
+            else items
         }
         _state.update { it.copy(playlist = newPlaylist) }
         player.setPlaylist(newPlaylist)
@@ -196,6 +202,7 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
             isVideo = isVideo,
         )
         _state.update { it.copy(playlist = listOf(item), currentIndex = 0) }
+        unshuffledPlaylist = null
         player.setPlaylist(listOf(item))
         selectTrack(0)
     }
@@ -213,13 +220,17 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
     fun seekTo(ms: Long) = player.seekTo(ms)
 
     fun next() {
-        val i = _state.value.currentIndex + 1
-        if (i in _state.value.playlist.indices) selectTrack(i)
+        val s = _state.value
+        val target = indexForSkip(s.playSequence, s.playlist.size, s.currentIndex, forward = true)
+            ?: return
+        selectTrack(target)
     }
 
     fun previous() {
-        val i = _state.value.currentIndex - 1
-        if (i in _state.value.playlist.indices) selectTrack(i)
+        val s = _state.value
+        val target = indexForSkip(s.playSequence, s.playlist.size, s.currentIndex, forward = false)
+            ?: return
+        selectTrack(target)
     }
 
     fun setAudioOnly(audioOnly: Boolean) {
@@ -234,6 +245,66 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
 
     fun setPlaylistUserOverride(visible: Boolean?) {
         _state.update { it.copy(playlistUserOverride = visible) }
+    }
+
+    fun cyclePlaySequence() {
+        setPlaySequence(_state.value.playSequence.next())
+    }
+
+    fun setPlaySequence(mode: PlaySequence) {
+        val current = _state.value
+        if (current.playSequence == mode) return
+        val wasShuffled = current.playSequence == PlaySequence.SHUFFLE ||
+            current.playSequence == PlaySequence.SHUFFLE_REPEAT
+        val willShuffle = mode == PlaySequence.SHUFFLE || mode == PlaySequence.SHUFFLE_REPEAT
+        if (willShuffle && !wasShuffled) {
+            enterShuffle(current, mode)
+        } else if (!willShuffle && wasShuffled) {
+            exitShuffle(current, mode)
+        } else {
+            _state.update { it.copy(playSequence = mode) }
+        }
+    }
+
+    private fun enterShuffle(current: PlayerState, mode: PlaySequence) {
+        val original = current.playlist
+        if (original.isEmpty()) {
+            _state.update { it.copy(playSequence = mode) }
+            return
+        }
+        val playingIdx = current.currentIndex.coerceIn(0, original.lastIndex)
+        val playing = original[playingIdx]
+        unshuffledPlaylist = original
+        val rest = original.toMutableList().also { it.removeAt(playingIdx) }
+        rest.shuffle()
+        val shuffled = listOf(playing) + rest
+        player.syncPlaylist(shuffled, 0)
+        _state.update {
+            it.copy(playlist = shuffled, currentIndex = 0, playSequence = mode)
+        }
+    }
+
+    private fun exitShuffle(current: PlayerState, mode: PlaySequence) {
+        val original = unshuffledPlaylist ?: current.playlist
+        unshuffledPlaylist = null
+        val playingId = current.playlist.getOrNull(current.currentIndex)?.mediaId
+        val restoredIndex = original.indexOfFirst { it.mediaId == playingId }.let {
+            if (it < 0) current.currentIndex.coerceIn(0, original.lastIndex.coerceAtLeast(0)) else it
+        }
+        player.syncPlaylist(original, restoredIndex)
+        _state.update {
+            it.copy(playlist = original, currentIndex = restoredIndex, playSequence = mode)
+        }
+    }
+
+    private fun advanceOnTrackEnd() {
+        val s = _state.value
+        if (s.playSequence == PlaySequence.REPEAT_ONE) {
+            player.replay()
+            return
+        }
+        val next = indexAfterTrackEnd(s.playSequence, s.playlist.size, s.currentIndex) ?: return
+        selectTrack(next)
     }
 
     fun setVideoDecodeEnabled(enabled: Boolean) = player.setVideoDecodeEnabled(enabled)
