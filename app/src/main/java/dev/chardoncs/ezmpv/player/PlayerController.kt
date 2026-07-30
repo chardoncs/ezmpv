@@ -56,7 +56,6 @@ class PlayerController(private val app: Context, val bookmarks: BookmarkReposito
                         isPlaying = c.isPlaying,
                         positionMs = c.positionMs,
                         durationMs = c.durationMs,
-                        currentIndex = c.currentIndex,
                         audioOnly = c.audioOnly,
                     )
                 }
