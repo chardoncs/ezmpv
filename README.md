@@ -10,6 +10,8 @@ A calm and simple offline media player for Android, built on top of libmpv throu
 >
 > Under development. It will reach v1.0 when the features are complete.
 
+![Cover](./fastlane/metadata/android/en-US/images/featureGraphic.png)
+
 ## Features
 
 - libmpv
