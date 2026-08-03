@@ -3,11 +3,20 @@ package dev.chardoncs.ezmpv.player
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.core.content.ContextCompat
 import dev.chardoncs.ezmpv.audio.ArtCache
 import dev.chardoncs.ezmpv.audio.FileCopyCache
 import dev.chardoncs.ezmpv.audio.FolderRepository
 import dev.chardoncs.ezmpv.audio.LibraryPreferences
+import dev.chardoncs.ezmpv.audio.MetadataCache
+import dev.chardoncs.ezmpv.audio.SavedSession
+import dev.chardoncs.ezmpv.audio.SavedTrack
+import dev.chardoncs.ezmpv.audio.SessionStore
+import dev.chardoncs.ezmpv.audio.savedNameToPlaySequence
+import dev.chardoncs.ezmpv.audio.toMediaItem
+import dev.chardoncs.ezmpv.audio.toSavedName
+import dev.chardoncs.ezmpv.audio.toSavedTrack
 import dev.chardoncs.ezmpv.browse.BookmarkRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,10 +24,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -33,6 +44,7 @@ class PlayerController(
     private val artCache = ArtCache(app)
     private val copyCache = FileCopyCache(app)
     private val metadataCache = dev.chardoncs.ezmpv.audio.MetadataCache(app)
+    private val sessionStore = SessionStore(app)
 
     val player = Player(app).apply {
         onTrackEnd = { advanceOnTrackEnd() }
@@ -48,6 +60,10 @@ class PlayerController(
     private var unshuffledPlaylist: List<MediaItem>? = null
     @Volatile
     private var restartOnPrevious = false
+    private var restoreJob: Job? = null
+    private var positionSaveJob: Job? = null
+    private var saveDebounceJob: Job? = null
+    private var restoredOnce = false
 
     init {
         scope.launch {
@@ -61,6 +77,7 @@ class PlayerController(
         }
         scope.launch {
             player.state.collect { c ->
+                val wasPlaying = _state.value.isPlaying
                 _state.update { ui ->
                     ui.copy(
                         isPlaying = c.isPlaying,
@@ -69,7 +86,109 @@ class PlayerController(
                         audioOnly = c.audioOnly,
                     )
                 }
+                if (c.isPlaying && !wasPlaying) startPositionHeartbeat()
+                else if (!c.isPlaying && wasPlaying) {
+                    positionSaveJob?.cancel()
+                    positionSaveJob = null
+                    saveSessionSoon()
+                }
             }
+        }
+        restoreJob = scope.launch { restoreSessionIfPresent() }
+    }
+
+    private suspend fun restoreSessionIfPresent() {
+        val saved = sessionStore.load() ?: return
+        val library = _state.value.library
+        val resolved = resolveSavedTracks(saved.playlist, library)
+        if (resolved.isEmpty()) {
+            sessionStore.clear()
+            return
+        }
+        val safeIndex = saved.currentIndex.coerceIn(0, resolved.lastIndex)
+        if (saved.currentIndex !in resolved.indices || resolved.getOrNull(saved.currentIndex) == null) {
+            sessionStore.clear()
+            return
+        }
+        val current = resolved[safeIndex]
+        val file = withContext(Dispatchers.IO) { copyCache.getPlayableFile(current) }
+        if (file == null) {
+            sessionStore.clear()
+            return
+        }
+        ensureServiceStarted()
+        player.start()
+        val sequence = runCatching { PlaySequence.valueOf(saved.playSequenceName) }
+            .getOrDefault(PlaySequence.SEQUENCE)
+        _state.update {
+            it.copy(
+                playlist = resolved,
+                currentIndex = safeIndex,
+                playSequence = sequence,
+                audioOnly = saved.audioOnly,
+                loading = false,
+                hasVideo = current.isVideo && !saved.audioOnly,
+            )
+        }
+        player.setPlaylist(resolved)
+        player.setAudioOnly(saved.audioOnly)
+        player.loadFile(file.absolutePath, safeIndex, resumePositionMs = saved.positionMs)
+        restoredOnce = true
+    }
+
+    private suspend fun resolveSavedTracks(
+        saved: List<SavedTrack>,
+        library: List<MediaItem>,
+    ): List<MediaItem> {
+        val result = ArrayList<MediaItem>(saved.size)
+        for (track in saved) {
+            val match = library.firstOrNull { item ->
+                item.mediaId == track.uri.toString() ||
+                    (track.fileName != null && track.parentUri != null &&
+                        item.sourceUri.lastPathSegment?.substringAfterLast('/') == track.fileName &&
+                        item.sourceUri.toString().substringBeforeLast('/') == track.parentUri)
+            }
+            if (match != null) {
+                result.add(match)
+                continue
+            }
+            if (DocumentsContract.isTreeUri(track.uri)) continue
+            val exists = withContext(Dispatchers.IO) {
+                runCatching {
+                    app.contentResolver.openInputStream(track.uri)?.close()
+                    true
+                }.getOrDefault(false)
+            }
+            if (!exists) continue
+            result.add(track.toMediaItem())
+        }
+        return result
+    }
+
+    private fun startPositionHeartbeat() {
+        positionSaveJob?.cancel()
+        positionSaveJob = scope.launch {
+            while (true) {
+                delay(POSITION_SAVE_INTERVAL_MS)
+                saveSessionSoon()
+            }
+        }
+    }
+
+    private fun saveSessionSoon() {
+        saveDebounceJob?.cancel()
+        saveDebounceJob = scope.launch {
+            delay(SAVE_DEBOUNCE_MS)
+            val s = _state.value
+            if (s.playlist.isEmpty() || s.currentIndex !in s.playlist.indices) return@launch
+            val session = SavedSession(
+                playlist = s.playlist.map { it.toSavedTrack() },
+                currentIndex = s.currentIndex,
+                positionMs = player.state.value.positionMs.coerceAtLeast(0),
+                playSequenceName = s.playSequence.toSavedName(),
+                audioOnly = s.audioOnly,
+            )
+            sessionStore.save(session)
         }
     }
 
@@ -189,6 +308,7 @@ class PlayerController(
                 } else ui
             }
         }
+        saveSessionSoon()
     }
 
     fun selectTrack(index: Int) {
@@ -256,6 +376,7 @@ class PlayerController(
             )
         }
         player.setAudioOnly(audioOnly)
+        saveSessionSoon()
     }
 
     fun setPlaylistUserOverride(visible: Boolean?) {
@@ -279,6 +400,7 @@ class PlayerController(
         } else {
             _state.update { it.copy(playSequence = mode) }
         }
+        saveSessionSoon()
     }
 
     private fun enterShuffle(current: PlayerState, mode: PlaySequence) {
@@ -324,8 +446,31 @@ class PlayerController(
 
     fun setVideoDecodeEnabled(enabled: Boolean) = player.setVideoDecodeEnabled(enabled)
 
-    fun release() {
+    fun stopPlayback() {
+        restoreJob?.cancel()
+        positionSaveJob?.cancel()
+        saveDebounceJob?.cancel()
+        positionSaveJob = null
+        saveDebounceJob = null
+        restoredOnce = false
+        scope.launch { sessionStore.clear() }
         player.stop()
+        serviceStarted = false
+        _state.update {
+            PlayerState(
+                library = it.library,
+                selectedFolders = it.selectedFolders,
+            )
+        }
+    }
+
+    fun release() {
+        stopPlayback()
         scope.cancel()
+    }
+
+    companion object {
+        private const val POSITION_SAVE_INTERVAL_MS = 5_000L
+        private const val SAVE_DEBOUNCE_MS = 500L
     }
 }
