@@ -192,12 +192,15 @@ app/src/main/java/dev/chardoncs/ezmpv/
 
 Three top-level tabs are wired through `NavigationSuiteScaffold` (auto bottom `NavigationBar` / side `NavigationRail`). The full player is an animated overlay above the tab content, not a navigation destination. Its open state is saveable across activity recreation, so orientation changes do not close it. A `MiniPlayerBar` is pinned above the nav suite whenever the full player is closed. Back always closes an open Now Playing overlay before it acts on a file-browser directory or Library drill-down stack; those in-screen `BackHandler`s must be disabled while `playerOpen` is true. The NavHost also has a `file_browser/{treeUri}/{title}` route (URL-encoded args) reached from `BrowseScreen`; `FileBrowserScreen` keeps its own in-screen directory back stack (`rememberSaveable` `mutableStateListOf<Uri>` + parallel title list), so after the player is closed back navigation walks the directory tree first, then returns to the Browse tab.
 
-## Key conventions
+## Conventions
 
 - **No XML views/layouts** — everything UI is Compose. `res/values/themes.xml` is a minimal fallback only (used by the system before Compose inflates). The only XML drawables are the launcher icon.
 - **Material 3 tokens, not hardcoded colors** — use `MaterialTheme.colorScheme.*`. Dynamic color is on by default; the bundled scheme in `Color.kt` is the Android <12 fallback.
 - **No comments in code unless asked.** (Repo convention.)
 - **Don't commit secrets or `local.properties`.**
+- When using classes, consider importing them rather than using a long qualifier.
+- Remember to remove unused imports.
+- Avoid using deprecated Android APIs and deprecated Kotlin features. If you notice some, try searching for alternatives.
 
 ## Architecture: unified player + service + mini player
 
