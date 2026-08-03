@@ -87,6 +87,8 @@ import dev.chardoncs.ezmpv.player.PlayerState
 import dev.chardoncs.ezmpv.player.VideoSurfaceHost
 import dev.chardoncs.ezmpv.player.VideoTarget
 import dev.chardoncs.ezmpv.player.playlistVisible
+import dev.chardoncs.ezmpv.playlists.Playlist
+import dev.chardoncs.ezmpv.playlists.PlaylistController
 import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
 import kotlin.time.Duration.Companion.milliseconds
 
@@ -155,8 +157,8 @@ fun NowPlayingScreen(
 @Composable
 private fun PortraitNowPlayingScreen(
     controller: PlayerController,
-    playlistController: dev.chardoncs.ezmpv.playlists.PlaylistController,
-    playlists: List<dev.chardoncs.ezmpv.playlists.Playlist>,
+    playlistController: PlaylistController,
+    playlists: List<Playlist>,
     videoHost: VideoSurfaceHost,
     state: PlayerState,
     onBack: () -> Unit,
@@ -165,7 +167,7 @@ private fun PortraitNowPlayingScreen(
     modifier: Modifier = Modifier,
 ) {
     val currentTrack = state.playlist.getOrNull(state.currentIndex)
-    var addToPlaylistFor by remember { mutableStateOf<dev.chardoncs.ezmpv.player.MediaItem?>(null) }
+    var addToPlaylistFor by remember { mutableStateOf<MediaItem?>(null) }
     val isFav = currentTrack?.let { playlistController.isFavorite(it.sourceUri) } == true
     NowPlayingMenuDrawer(
         isVideoTrack = currentTrack?.isVideo == true,
