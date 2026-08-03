@@ -93,13 +93,13 @@ class PlayerService : MediaSessionService() {
         mediaSession
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        (application as EzmpvApplication).playerController.release()
+        (application as EzmpvApplication).playerController.stopPlayback()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     override fun onDestroy() {
-        (application as EzmpvApplication).playerController.release()
+        (application as EzmpvApplication).playerController.stopPlayback()
         mediaSession?.run {
             player.release()
             release()

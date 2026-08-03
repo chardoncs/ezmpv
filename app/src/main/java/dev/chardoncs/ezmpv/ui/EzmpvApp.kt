@@ -87,6 +87,9 @@ fun EzmpvApp() {
         android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val view = LocalView.current
     val hasTrack = state.playlist.isNotEmpty() && state.currentIndex >= 0
+    LaunchedEffect(hasTrack) {
+        if (!hasTrack) playerOpen = false
+    }
     val videoTarget = if (state.hasVideo && !state.audioOnly) {
         when {
             !playerOpen -> VideoTarget.MINI

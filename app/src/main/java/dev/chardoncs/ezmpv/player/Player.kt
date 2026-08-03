@@ -26,6 +26,7 @@ class Player(private val context: Context) {
     private var videoDecodeEnabled = true
 
     private var mpv: MPVLib? = null
+    private var pendingResumeMs: Long? = null
     private val observer = object : MPVLib.EventObserver {
         override fun eventProperty(property: String) {}
         override fun eventProperty(property: String, value: Long) {
@@ -52,9 +53,25 @@ class Player(private val context: Context) {
             when (eventId) {
                 MPV_EVENT_END_FILE -> if (!awaitingFileLoaded) handleEndFile()
                 MPV_EVENT_FILE_LOADED -> {
+                    val m = mpv ?: return
                     if (awaitingFileLoaded) {
                         awaitingFileLoaded = false
-                        mpv?.setPropertyBoolean("pause", false)
+                        val resumeMs = pendingResumeMs
+                        if (resumeMs != null) {
+                            pendingResumeMs = null
+                            runCatching { m.command(arrayOf("seek", "%.3f".format(resumeMs / 1000.0), "absolute")) }
+                            _state.update { it.copy(positionMs = resumeMs) }
+                            m.setPropertyBoolean("pause", true)
+                        } else {
+                            m.setPropertyBoolean("pause", false)
+                        }
+                    } else {
+                        pendingResumeMs?.let { resumeMs ->
+                            pendingResumeMs = null
+                            runCatching { m.command(arrayOf("seek", "%.3f".format(resumeMs / 1000.0), "absolute")) }
+                            m.setPropertyBoolean("pause", true)
+                            _state.update { it.copy(positionMs = resumeMs) }
+                        }
                     }
                 }
             }
@@ -119,11 +136,12 @@ class Player(private val context: Context) {
         }
     }
 
-    fun loadFile(path: String, index: Int) {
+    fun loadFile(path: String, index: Int, resumePositionMs: Long? = null) {
         val m = mpv ?: return
         eofHandled = false
         playbackEnded = false
         awaitingFileLoaded = true
+        pendingResumeMs = resumePositionMs?.takeIf { it > 0 }
         _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0, isPlaying = false) }
         m.setPropertyBoolean("pause", true)
         m.command(arrayOf("loadfile", path, "replace"))
