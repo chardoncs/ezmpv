@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import dev.chardoncs.ezmpv.player.PlaySequence
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -14,6 +15,7 @@ private val VIDEO_GROUP_BY = stringPreferencesKey("video_group_by")
 private val AUDIO_VIEW_MODE = stringPreferencesKey("audio_view_mode")
 private val AUDIO_GROUP_BY = stringPreferencesKey("audio_group_by")
 private val RESTART_ON_PREVIOUS = booleanPreferencesKey("restart_track_on_previous")
+private val PLAY_SEQUENCE = stringPreferencesKey("play_sequence")
 
 enum class ViewMode { LIST, GRID }
 enum class GroupBy { LOCATION, ARTIST, ALBUM, YEAR }
@@ -41,6 +43,16 @@ class LibraryPreferences(private val context: Context) {
 
     suspend fun setRestartOnPrevious(enabled: Boolean) {
         context.libraryPrefs.edit { it[RESTART_ON_PREVIOUS] = enabled }
+    }
+
+    fun playSequence(): Flow<PlaySequence> =
+        context.libraryPrefs.data.map { p ->
+            p[PLAY_SEQUENCE]?.let { runCatching { PlaySequence.valueOf(it) }.getOrNull() }
+                ?: PlaySequence.SEQUENCE
+        }
+
+    suspend fun setPlaySequence(mode: PlaySequence) {
+        context.libraryPrefs.edit { it[PLAY_SEQUENCE] = mode.name }
     }
 
     suspend fun setViewMode(type: LibraryType, mode: ViewMode) {

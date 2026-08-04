@@ -29,10 +29,12 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.time.Duration.Companion.milliseconds
 
 class PlayerController(
     private val app: Context,
@@ -64,6 +66,8 @@ class PlayerController(
     private var positionSaveJob: Job? = null
     private var saveDebounceJob: Job? = null
     private var restoredOnce = false
+    @Volatile
+    private var stoppedWithRememberedQueue = false
 
     init {
         scope.launch {
@@ -74,6 +78,16 @@ class PlayerController(
                 _state.update { it.copy(selectedFolders = list.map { b -> b.uri }) }
                 refreshPlaylist()
             }
+        }
+        scope.launch {
+            prefs.playSequence()
+                .distinctUntilChanged()
+                .collect { mode ->
+                    if (!restoredOnce) return@collect
+                    if (_state.value.playSequence != mode) {
+                        setPlaySequence(mode, fromPrefs = true)
+                    }
+                }
         }
         scope.launch {
             player.state.collect { c ->
@@ -120,6 +134,7 @@ class PlayerController(
         player.start()
         val sequence = runCatching { PlaySequence.valueOf(saved.playSequenceName) }
             .getOrDefault(PlaySequence.SEQUENCE)
+        val art = if (!current.isVideo) artCache.getArt(current) else null
         _state.update {
             it.copy(
                 playlist = resolved,
@@ -128,11 +143,13 @@ class PlayerController(
                 audioOnly = saved.audioOnly,
                 loading = false,
                 hasVideo = current.isVideo && !saved.audioOnly,
+                currentArt = art,
             )
         }
         player.setPlaylist(resolved)
         player.setAudioOnly(saved.audioOnly)
         player.loadFile(file.absolutePath, safeIndex, resumePositionMs = saved.positionMs)
+        stoppedWithRememberedQueue = false
         restoredOnce = true
     }
 
@@ -169,7 +186,7 @@ class PlayerController(
         positionSaveJob?.cancel()
         positionSaveJob = scope.launch {
             while (true) {
-                delay(POSITION_SAVE_INTERVAL_MS)
+                delay(POSITION_SAVE_INTERVAL_MS.milliseconds)
                 saveSessionSoon()
             }
         }
@@ -178,7 +195,7 @@ class PlayerController(
     private fun saveSessionSoon() {
         saveDebounceJob?.cancel()
         saveDebounceJob = scope.launch {
-            delay(SAVE_DEBOUNCE_MS)
+            delay(SAVE_DEBOUNCE_MS.milliseconds)
             val s = _state.value
             if (s.playlist.isEmpty() || s.currentIndex !in s.playlist.indices) return@launch
             val session = SavedSession(
@@ -210,6 +227,7 @@ class PlayerController(
 
     fun playFromLibrary(library: List<MediaItem>, index: Int) {
         val item = library.getOrNull(index) ?: return
+        stoppedWithRememberedQueue = false
         ensureServiceStarted()
         player.start()
         loadJob?.cancel()
@@ -224,6 +242,7 @@ class PlayerController(
     }
 
     fun playDirectory(folderUri: Uri, recursive: Boolean, onQueued: () -> Unit = {}) {
+        stoppedWithRememberedQueue = false
         ensureServiceStarted()
         player.start()
         loadJob?.cancel()
@@ -313,6 +332,7 @@ class PlayerController(
 
     fun selectTrack(index: Int) {
         val item = _state.value.playlist.getOrNull(index) ?: return
+        stoppedWithRememberedQueue = false
         ensureServiceStarted()
         player.start()
         loadJob?.cancel()
@@ -330,6 +350,7 @@ class PlayerController(
             mimeType = mimeType,
             isVideo = isVideo,
         )
+        stoppedWithRememberedQueue = false
         _state.update { it.copy(playlist = listOf(item), currentIndex = 0) }
         unshuffledPlaylist = null
         player.setPlaylist(listOf(item))
@@ -342,13 +363,29 @@ class PlayerController(
 
     suspend fun enrichItem(item: MediaItem): MediaItem = folderRepo.enrich(item)
 
-    fun togglePlayPause() = player.playPause()
+    fun togglePlayPause() {
+        if (stoppedWithRememberedQueue && !_state.value.isPlaying) {
+            resumeRememberedPlayback()
+            return
+        }
+        player.playPause()
+    }
 
     fun setPlaying(play: Boolean) {
+        if (play && stoppedWithRememberedQueue) {
+            resumeRememberedPlayback()
+            return
+        }
         if (_state.value.isPlaying != play) player.playPause()
     }
 
-    fun seekTo(ms: Long) = player.seekTo(ms)
+    fun seekTo(ms: Long) {
+        if (stoppedWithRememberedQueue) {
+            _state.update { it.copy(positionMs = ms.coerceAtLeast(0)) }
+            return
+        }
+        player.seekTo(ms)
+    }
 
     fun next() {
         val s = _state.value
@@ -387,9 +424,12 @@ class PlayerController(
         setPlaySequence(_state.value.playSequence.next())
     }
 
-    fun setPlaySequence(mode: PlaySequence) {
+    fun setPlaySequence(mode: PlaySequence, fromPrefs: Boolean = false) {
         val current = _state.value
-        if (current.playSequence == mode) return
+        if (current.playSequence == mode) {
+            if (!fromPrefs) scope.launch { prefs.setPlaySequence(mode) }
+            return
+        }
         val wasShuffled = current.playSequence == PlaySequence.SHUFFLE ||
             current.playSequence == PlaySequence.SHUFFLE_REPEAT
         val willShuffle = mode == PlaySequence.SHUFFLE || mode == PlaySequence.SHUFFLE_REPEAT
@@ -400,6 +440,7 @@ class PlayerController(
         } else {
             _state.update { it.copy(playSequence = mode) }
         }
+        if (!fromPrefs) scope.launch { prefs.setPlaySequence(mode) }
         saveSessionSoon()
     }
 
@@ -452,15 +493,76 @@ class PlayerController(
         saveDebounceJob?.cancel()
         positionSaveJob = null
         saveDebounceJob = null
-        restoredOnce = false
-        scope.launch { sessionStore.clear() }
+        val hadQueue = _state.value.playlist.isNotEmpty() &&
+            _state.value.currentIndex in _state.value.playlist.indices
         player.stop()
         serviceStarted = false
-        _state.update {
-            PlayerState(
-                library = it.library,
-                selectedFolders = it.selectedFolders,
-            )
+        if (hadQueue) {
+            stoppedWithRememberedQueue = true
+            _state.update {
+                it.copy(
+                    isPlaying = false,
+                    loading = false,
+                    error = null,
+                    currentArt = null,
+                    hasVideo = it.playlist.getOrNull(it.currentIndex)?.isVideo == true && !it.audioOnly,
+                )
+            }
+            scope.launch { sessionStore.clear() }
+            scope.launch {
+                val item = _state.value.playlist.getOrNull(_state.value.currentIndex) ?: return@launch
+                if (item.isVideo) return@launch
+                val art = artCache.getArt(item)
+                if (art != null && stoppedWithRememberedQueue &&
+                    _state.value.currentIndex == _state.value.playlist.indexOf(item)
+                ) {
+                    _state.update { it.copy(currentArt = art) }
+                }
+            }
+        } else {
+            restoredOnce = false
+            stoppedWithRememberedQueue = false
+            scope.launch { sessionStore.clear() }
+            _state.update {
+                PlayerState(
+                    library = it.library,
+                    selectedFolders = it.selectedFolders,
+                    playSequence = it.playSequence,
+                )
+            }
+        }
+    }
+
+    fun resumeRememberedPlayback() {
+        if (!stoppedWithRememberedQueue) return
+        val s = _state.value
+        val index = s.currentIndex
+        val item = s.playlist.getOrNull(index) ?: return
+        stoppedWithRememberedQueue = false
+        ensureServiceStarted()
+        player.start()
+        loadJob?.cancel()
+        loadJob = scope.launch {
+            _state.update { it.copy(loading = true) }
+            val file = withContext(Dispatchers.IO) { copyCache.getPlayableFile(item) }
+            if (file == null) {
+                _state.update { it.copy(loading = false, error = "Failed to copy ${item.title}") }
+                return@launch
+            }
+            currentCoroutineContext().ensureActive()
+            player.loadFile(file.absolutePath, index, resumePositionMs = s.positionMs)
+            if (!item.isVideo) {
+                val art = artCache.getArt(item)
+                _state.update {
+                    it.copy(currentArt = art, loading = false, error = null, hasVideo = false)
+                }
+            } else {
+                _state.update {
+                    it.copy(loading = false, error = null, hasVideo = !s.audioOnly)
+                }
+            }
+            restoredOnce = true
+            saveSessionSoon()
         }
     }
 

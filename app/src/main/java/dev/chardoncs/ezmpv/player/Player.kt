@@ -27,6 +27,7 @@ class Player(private val context: Context) {
 
     private var mpv: MPVLib? = null
     private var pendingResumeMs: Long? = null
+    private var pendingAutoplay: Boolean = true
     private val observer = object : MPVLib.EventObserver {
         override fun eventProperty(property: String) {}
         override fun eventProperty(property: String, value: Long) {
@@ -61,9 +62,9 @@ class Player(private val context: Context) {
                             pendingResumeMs = null
                             runCatching { m.command(arrayOf("seek", "%.3f".format(resumeMs / 1000.0), "absolute")) }
                             _state.update { it.copy(positionMs = resumeMs) }
-                            m.setPropertyBoolean("pause", true)
+                            m.setPropertyBoolean("pause", !pendingAutoplay)
                         } else {
-                            m.setPropertyBoolean("pause", false)
+                            m.setPropertyBoolean("pause", !pendingAutoplay)
                         }
                     } else {
                         pendingResumeMs?.let { resumeMs ->
@@ -128,20 +129,17 @@ class Player(private val context: Context) {
         playbackEnded = false
         awaitingFileLoaded = false
         _state.update {
-            PlayerState(
-                playlist = it.playlist,
-                selectedFolders = it.selectedFolders,
-                audioOnly = it.audioOnly,
-            )
+            it.copy(isPlaying = false)
         }
     }
 
-    fun loadFile(path: String, index: Int, resumePositionMs: Long? = null) {
+    fun loadFile(path: String, index: Int, resumePositionMs: Long? = null, autoplay: Boolean = true) {
         val m = mpv ?: return
         eofHandled = false
         playbackEnded = false
         awaitingFileLoaded = true
         pendingResumeMs = resumePositionMs?.takeIf { it > 0 }
+        pendingAutoplay = autoplay
         _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0, isPlaying = false) }
         m.setPropertyBoolean("pause", true)
         m.command(arrayOf("loadfile", path, "replace"))
