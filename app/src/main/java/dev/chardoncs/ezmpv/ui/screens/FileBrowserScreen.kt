@@ -102,7 +102,7 @@ fun FileBrowserScreen(
     val stack = rememberSaveable(rootTreeUri, saver = UriListSaver) { mutableStateListOf(rootTreeUri) }
     val titles = rememberSaveable(rootTreeUri, rootTitle, saver = StringListSaver) { mutableStateListOf(rootTitle) }
     val listStates = rememberSaveable(rootTreeUri, saver = LazyListStateUriMapSaver) {
-        mutableStateMapOf<Uri, LazyListState>()
+        mutableStateMapOf()
     }
 
     val currentUri = stack.last()
@@ -602,12 +602,12 @@ private fun formatBytes(bytes: Long): String = when {
     else -> "$bytes B"
 }
 
-private val UriListSaver = androidx.compose.runtime.saveable.Saver<MutableList<Uri>, List<String>>(
+private val UriListSaver = Saver<MutableList<Uri>, List<String>>(
     save = { it.map(Uri::toString) },
     restore = { it.map(Uri::parse).toMutableList() },
 )
 
-private val StringListSaver = androidx.compose.runtime.saveable.Saver<MutableList<String>, List<String>>(
+private val StringListSaver = Saver<MutableList<String>, List<String>>(
     save = { it.toList() },
     restore = { it.toMutableList() },
 )
