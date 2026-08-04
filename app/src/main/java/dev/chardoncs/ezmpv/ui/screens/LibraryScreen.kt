@@ -20,7 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
@@ -56,11 +58,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -128,6 +133,39 @@ private val LibraryScreenSaver = androidx.compose.runtime.saveable.Saver<android
     },
 )
 
+private fun LibraryScreen.scrollKey(): String = when (this) {
+    is LibraryScreen.Home -> "home"
+    is LibraryScreen.Section -> "section:${type.name}"
+    is LibraryScreen.DrillDown -> "drill:${type.name}:$groupKey"
+    is LibraryScreen.PlaylistDetail -> "playlist:$playlistId"
+}
+
+private val LazyListStateMapSaver = Saver<SnapshotStateMap<String, LazyListState>, Map<String, List<Int>>>(
+    save = { map ->
+        map.entries.associate { (k, v) ->
+            k to listOf(v.firstVisibleItemIndex, v.firstVisibleItemScrollOffset)
+        }
+    },
+    restore = { saved ->
+        mutableStateMapOf<String, LazyListState>().apply {
+            saved.forEach { (k, v) -> put(k, LazyListState(v[0], v[1])) }
+        }
+    },
+)
+
+private val LazyGridStateMapSaver = Saver<SnapshotStateMap<String, LazyGridState>, Map<String, List<Int>>>(
+    save = { map ->
+        map.entries.associate { (k, v) ->
+            k to listOf(v.firstVisibleItemIndex, v.firstVisibleItemScrollOffset)
+        }
+    },
+    restore = { saved ->
+        mutableStateMapOf<String, LazyGridState>().apply {
+            saved.forEach { (k, v) -> put(k, LazyGridState(v[0], v[1])) }
+        }
+    },
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
@@ -187,14 +225,25 @@ fun LibraryScreen(
     val backStack = rememberSaveable(saver = LibraryScreenSaver) {
         mutableStateListOf<LibraryScreen>(LibraryScreen.Home)
     }
+    val listStates = rememberSaveable(saver = LazyListStateMapSaver) {
+        mutableStateMapOf<String, LazyListState>()
+    }
+    val gridStates = rememberSaveable(saver = LazyGridStateMapSaver) {
+        mutableStateMapOf<String, LazyGridState>()
+    }
     val current = backStack.last()
     fun push(screen: LibraryScreen) { backStack.add(screen) }
     fun pop(): Boolean {
         if (backStack.size <= 1) return false
-        backStack.removeAt(backStack.lastIndex)
+        val removed = backStack.removeAt(backStack.lastIndex)
+        listStates.remove(removed.scrollKey())
+        gridStates.remove(removed.scrollKey())
         return true
     }
     BackHandler(enabled = !playerOpen && backStack.size > 1) { pop() }
+
+    val currentListState = listStates.getOrPut(current.scrollKey()) { LazyListState() }
+    val currentGridState = gridStates.getOrPut(current.scrollKey()) { LazyGridState() }
 
     val title = when (current) {
         is LibraryScreen.Home -> "Library"
@@ -278,6 +327,7 @@ fun LibraryScreen(
                     playlists = playlists,
                     resolved = resolved,
                     controller = controller,
+                    listState = currentListState,
                     onOpenVideo = { push(LibraryScreen.Section(LibraryType.VIDEO)) },
                     onOpenAudio = { push(LibraryScreen.Section(LibraryType.AUDIO)) },
                     onOpenPlaylist = { id -> push(LibraryScreen.PlaylistDetail(id)) },
@@ -291,6 +341,7 @@ fun LibraryScreen(
                     prefs = prefs,
                     scope = scope,
                     controller = controller,
+                    listState = currentListState,
                     onOpenPlayer = onOpenPlayer,
                     onDrillInto = { key -> push(LibraryScreen.DrillDown(current.type, key)) },
                 )
@@ -298,6 +349,8 @@ fun LibraryScreen(
                     state = state,
                     tracks = if (current.type == LibraryType.AUDIO) audioTracks else videoTracks,
                     viewMode = if (current.type == LibraryType.AUDIO) audioViewMode else videoViewMode,
+                    listState = currentListState,
+                    gridState = currentGridState,
                     groupKey = current.groupKey,
                     groupBy = if (current.type == LibraryType.AUDIO) audioGroupBy else videoGroupBy,
                     isAudio = current.type == LibraryType.AUDIO,
@@ -311,6 +364,7 @@ fun LibraryScreen(
                     state = state,
                     controller = controller,
                     playlistController = playlistController,
+                    listState = currentListState,
                     onOpenPlayer = onOpenPlayer,
                     onUnavailable = { scope.launch { snackbarHostState.showSnackbar(unavailableMsg) } },
                     modifier = Modifier.fillMaxSize(),
@@ -366,13 +420,14 @@ private fun LibraryHome(
     playlists: List<Playlist>,
     resolved: List<ResolvedPlaylist>,
     controller: PlayerController,
+    listState: LazyListState,
     onOpenVideo: () -> Unit,
     onOpenAudio: () -> Unit,
     onOpenPlaylist: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    LazyColumn(modifier = modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         item(key = "playlists_header") {
             SectionHeader("Playlists")
         }
@@ -583,6 +638,7 @@ private fun SectionScreen(
     prefs: LibraryPreferences,
     scope: kotlinx.coroutines.CoroutineScope,
     controller: PlayerController,
+    listState: LazyListState,
     onOpenPlayer: () -> Unit,
     onDrillInto: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -602,7 +658,7 @@ private fun SectionScreen(
     } else {
         listOf(GroupBy.LOCATION, GroupBy.ARTIST, GroupBy.ALBUM, GroupBy.YEAR)
     }
-    LazyColumn(modifier = modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         item(key = "section_controls") {
             SectionControls(
                 title = if (type == LibraryType.AUDIO) "Audio" else "Video",
@@ -1050,6 +1106,8 @@ private fun GroupDrillDown(
     state: PlayerState,
     tracks: List<IndexedValue<MediaItem>>,
     viewMode: ViewMode,
+    listState: LazyListState,
+    gridState: LazyGridState,
     groupKey: String?,
     groupBy: GroupBy,
     isAudio: Boolean,
@@ -1072,6 +1130,7 @@ private fun GroupDrillDown(
             groupTracks = groupTracks,
             state = state,
             controller = controller,
+            listState = listState,
             onOpenPlayer = onOpenPlayer,
             modifier = modifier,
         )
@@ -1081,6 +1140,8 @@ private fun GroupDrillDown(
             viewMode = viewMode,
             state = state,
             controller = controller,
+            listState = listState,
+            gridState = gridState,
             onOpenPlayer = onOpenPlayer,
             modifier = modifier,
         )
@@ -1092,6 +1153,7 @@ private fun AlbumDrillDown(
     groupTracks: List<IndexedValue<MediaItem>>,
     state: PlayerState,
     controller: PlayerController,
+    listState: LazyListState,
     onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1108,7 +1170,7 @@ private fun AlbumDrillDown(
         sorted.groupBy { it.value.discNumber }
             .toSortedMap(compareBy { it ?: Int.MAX_VALUE })
     }
-    LazyColumn(modifier = modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         byDisc.forEach { (disc, items) ->
             item(key = "disc_${disc ?: -1}") {
                 Text(
@@ -1145,11 +1207,13 @@ private fun TrackListOrGrid(
     viewMode: ViewMode,
     state: PlayerState,
     controller: PlayerController,
+    listState: LazyListState,
+    gridState: LazyGridState,
     onOpenPlayer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (viewMode == ViewMode.LIST) {
-        LazyColumn(modifier = modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
             itemsIndexed(groupTracks, key = { _, iv -> "gd_${iv.index}" }) { _, iv ->
                 TrackListRow(
                     track = iv.value,
@@ -1166,6 +1230,7 @@ private fun TrackListOrGrid(
     } else {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 140.dp),
+            state = gridState,
             modifier = modifier.fillMaxSize(),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1211,6 +1276,7 @@ private fun PlaylistDetailScreen(
     state: PlayerState,
     controller: PlayerController,
     playlistController: dev.chardoncs.ezmpv.playlists.PlaylistController,
+    listState: LazyListState,
     onOpenPlayer: () -> Unit,
     onUnavailable: () -> Unit,
     modifier: Modifier = Modifier,
@@ -1227,7 +1293,7 @@ private fun PlaylistDetailScreen(
         return
     }
     val availableEntries = rp.entries.filter { it.available }
-    LazyColumn(modifier = modifier.fillMaxSize()) {
+    LazyColumn(state = listState, modifier = modifier.fillMaxSize()) {
         item(key = "pl_header") {
             Column(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),

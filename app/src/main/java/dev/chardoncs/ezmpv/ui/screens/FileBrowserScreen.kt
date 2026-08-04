@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -45,12 +46,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateSetOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +74,7 @@ import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.core.net.toUri
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,9 +101,13 @@ fun FileBrowserScreen(
 
     val stack = rememberSaveable(rootTreeUri, saver = UriListSaver) { mutableStateListOf(rootTreeUri) }
     val titles = rememberSaveable(rootTreeUri, rootTitle, saver = StringListSaver) { mutableStateListOf(rootTitle) }
+    val listStates = rememberSaveable(rootTreeUri, saver = LazyListStateUriMapSaver) {
+        mutableStateMapOf<Uri, LazyListState>()
+    }
 
     val currentUri = stack.last()
     val currentTitle = titles.last()
+    val currentListState = listStates.getOrPut(currentUri) { LazyListState() }
 
     var entries by remember { mutableStateOf<List<DirEntry>?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -117,12 +126,16 @@ fun FileBrowserScreen(
 
     val inSelection = selection.isNotEmpty()
     val atRoot = stack.size == 1
+    fun popStack() {
+        val removed = stack.removeAt(stack.lastIndex)
+        titles.removeAt(titles.lastIndex)
+        listStates.remove(removed)
+    }
     BackHandler(enabled = !playerOpen && (!atRoot || inSelection)) {
         if (inSelection) {
             selection.clear()
         } else {
-            stack.removeAt(stack.lastIndex)
-            titles.removeAt(titles.lastIndex)
+            popStack()
         }
     }
 
@@ -186,10 +199,7 @@ fun FileBrowserScreen(
                     title = { Text(currentTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     navigationIcon = {
                         IconButton(onClick = {
-                            if (atRoot) onExit() else {
-                                stack.removeAt(stack.lastIndex)
-                                titles.removeAt(titles.lastIndex)
-                            }
+                            if (atRoot) onExit() else popStack()
                         }) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
@@ -214,7 +224,7 @@ fun FileBrowserScreen(
                     )
                 }
                 else -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(state = currentListState, modifier = Modifier.fillMaxSize()) {
                         items(entries!!, key = { it.uri }) { entry ->
                             val selected = entry.uri in selection
                             DirEntryRow(
@@ -600,4 +610,17 @@ private val UriListSaver = androidx.compose.runtime.saveable.Saver<MutableList<U
 private val StringListSaver = androidx.compose.runtime.saveable.Saver<MutableList<String>, List<String>>(
     save = { it.toList() },
     restore = { it.toMutableList() },
+)
+
+private val LazyListStateUriMapSaver = Saver<SnapshotStateMap<Uri, LazyListState>, Map<String, List<Int>>>(
+    save = { map ->
+        map.entries.associate { (k, v) ->
+            k.toString() to listOf(v.firstVisibleItemIndex, v.firstVisibleItemScrollOffset)
+        }
+    },
+    restore = { saved ->
+        mutableStateMapOf<Uri, LazyListState>().apply {
+            saved.forEach { (k, v) -> put(k.toUri(), LazyListState(v[0], v[1])) }
+        }
+    },
 )
