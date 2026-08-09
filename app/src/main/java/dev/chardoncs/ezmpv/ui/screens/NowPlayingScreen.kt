@@ -542,13 +542,16 @@ private fun PlaylistOverlay(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        text = item.artist ?: "Unknown artist",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    val sub = item.artist ?: if (item.isVideo) null else "Unknown artist"
+                    if (sub != null) {
+                        Text(
+                            text = sub,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 IconButton(
                     onClick = { onSelect(index) },
@@ -613,13 +616,17 @@ private fun Modifier.NowPlayingControls(
                     onOpenDrawer = onOpenDrawer,
                 )
             }
-            Text(
-                text = track?.artist ?: "Unknown artist",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            val artistText = track?.artist
+                ?: if (track?.isVideo == true) null else "Unknown artist"
+            if (artistText != null) {
+                Text(
+                    text = artistText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
 
         val posMs = dragPosition ?: state.positionMs

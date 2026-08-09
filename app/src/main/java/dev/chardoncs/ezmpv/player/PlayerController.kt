@@ -26,11 +26,14 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,6 +61,9 @@ class PlayerController(
 
     private val _state = MutableStateFlow(PlayerState())
     val state: StateFlow<PlayerState> = _state.asStateFlow()
+
+    private val _openPlayerRequest = Channel<Unit>(Channel.CONFLATED)
+    val openPlayerRequest: Flow<Unit> = _openPlayerRequest.receiveAsFlow()
 
     private var serviceStarted = false
     private var loadJob: Job? = null
@@ -319,12 +325,12 @@ class PlayerController(
                 )
             }
         }
-        val cached = metadataCache.get(item)
-        if (cached != null) {
+        val enriched = folderRepo.enrich(item, file.absolutePath)
+        if (enriched != item) {
             _state.update { ui ->
                 val updated = ui.playlist.toMutableList()
                 if (index in updated.indices) {
-                    updated[index] = cached
+                    updated[index] = enriched
                     ui.copy(playlist = updated)
                 } else ui
             }
@@ -348,7 +354,7 @@ class PlayerController(
         val isVideo = mimeType?.startsWith("video/") == true
         val item = MediaItem(
             sourceUri = uri,
-            title = uri.lastPathSegment?.substringAfterLast('/') ?: "Picked file",
+            title = "Picked file",
             mimeType = mimeType,
             isVideo = isVideo,
         )
@@ -357,6 +363,22 @@ class PlayerController(
         unshuffledPlaylist = null
         player.setPlaylist(listOf(item))
         selectTrack(0)
+    }
+
+    fun playFromIntent(uri: Uri, mimeType: String?) {
+        val isVideo = mimeType?.startsWith("video/") == true
+        val item = MediaItem(
+            sourceUri = uri,
+            title = "Picked file",
+            mimeType = mimeType,
+            isVideo = isVideo,
+        )
+        stoppedWithRememberedQueue = false
+        _state.update { it.copy(playlist = listOf(item), currentIndex = 0) }
+        unshuffledPlaylist = null
+        player.setPlaylist(listOf(item))
+        selectTrack(0)
+        scope.launch { _openPlayerRequest.send(Unit) }
     }
 
     suspend fun getArt(item: MediaItem) = artCache.getArt(item)

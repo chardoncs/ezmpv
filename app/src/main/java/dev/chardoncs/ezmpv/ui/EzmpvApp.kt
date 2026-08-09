@@ -90,6 +90,9 @@ fun EzmpvApp() {
     LaunchedEffect(hasTrack) {
         if (!hasTrack) playerOpen = false
     }
+    LaunchedEffect(Unit) {
+        controller.openPlayerRequest.collect { playerOpen = true }
+    }
     val inPip = state.inPip
     val videoTarget = if (inPip && state.hasVideo && !state.audioOnly) {
         VideoTarget.PIP

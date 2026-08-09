@@ -6,6 +6,7 @@ import android.app.RemoteAction
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Icon
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
@@ -60,6 +61,20 @@ class MainActivity : ComponentActivity() {
                 EzmpvApp()
             }
         }
+        handleViewIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleViewIntent(intent)
+    }
+
+    private fun handleViewIntent(intent: Intent?) {
+        if (intent == null || intent.action != Intent.ACTION_VIEW) return
+        val uri: Uri = intent.data ?: return
+        val mime = intent.type ?: contentResolver.getType(uri)
+        controller.playFromIntent(uri, mime)
     }
 
     override fun onStart() {

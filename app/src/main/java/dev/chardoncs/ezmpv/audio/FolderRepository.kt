@@ -3,6 +3,7 @@ package dev.chardoncs.ezmpv.audio
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import dev.chardoncs.ezmpv.player.MediaItem
@@ -31,9 +32,11 @@ class FolderRepository(private val context: Context) {
         out
     }
 
-    suspend fun enrich(item: MediaItem): MediaItem {
-        metadataCache.get(item)?.let { return it }
-        val enriched = loadMetadata(item) ?: item
+    suspend fun enrich(item: MediaItem, fileOverride: String? = null): MediaItem {
+        if (fileOverride == null) {
+            metadataCache.get(item)?.let { return it }
+        }
+        val enriched = loadMetadata(item, fileOverride) ?: item
         metadataCache.put(enriched)
         return enriched
     }
@@ -41,7 +44,7 @@ class FolderRepository(private val context: Context) {
     private fun collectMedia(dir: DocumentFile, recursive: Boolean, out: MutableList<MediaItem>) {
         dir.listFiles().forEach { doc ->
             when {
-                doc.isDirectory && recursive -> collectMedia(doc, recursive, out)
+                doc.isDirectory && recursive -> collectMedia(doc, true, out)
                 doc.isFile -> {
                     val mime = doc.type
                     val isVideo = mime?.startsWith("video/") == true
@@ -63,11 +66,16 @@ class FolderRepository(private val context: Context) {
         }
     }
 
-    suspend fun loadMetadata(item: MediaItem): MediaItem? = withContext(Dispatchers.IO) {
+    suspend fun loadMetadata(item: MediaItem, fileOverride: String? = null): MediaItem? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(context, item.sourceUri)
+            if (fileOverride != null) {
+                retriever.setDataSource(fileOverride)
+            } else {
+                retriever.setDataSource(context, item.sourceUri)
+            }
             val title = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
+                ?: queryDisplayName(item.sourceUri)?.substringBeforeLast('.')
                 ?: item.title
             val artist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
             val album = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
@@ -98,5 +106,15 @@ class FolderRepository(private val context: Context) {
         } finally {
             runCatching { retriever.release() }
         }
+    }
+
+    private fun queryDisplayName(uri: Uri): String? {
+        if (uri.scheme != "content") return null
+        return runCatching {
+            context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+                ?.use { c ->
+                    if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+                }
+        }.getOrNull()
     }
 }

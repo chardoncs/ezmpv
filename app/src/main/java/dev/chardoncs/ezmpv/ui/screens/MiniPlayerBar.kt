@@ -170,13 +170,17 @@ fun Modifier.MiniPlayerBar(
                         text = track.title,
                         style = MaterialTheme.typography.bodyLarge,
                     )
-                    Text(
-                        text = track.artist ?: "Unknown artist",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    val subtitle = track.artist
+                        ?: if (track.isVideo) null else "Unknown artist"
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
                 IconButton(onClick = controller::togglePlayPause) {
                     dev.chardoncs.ezmpv.ui.components.AnimatedPlayPauseIcon(
