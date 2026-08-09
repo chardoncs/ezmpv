@@ -22,6 +22,8 @@ android {
         versionCode = if (abiSuffix == 0) baseVersionCode else baseVersionCode * 10 + abiSuffix
         versionName = "0.2.0"
 
+        buildConfigField("String", "CODENAME", "\"Ame\"")
+
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
@@ -60,6 +62,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

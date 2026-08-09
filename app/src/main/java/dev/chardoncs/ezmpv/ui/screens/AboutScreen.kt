@@ -31,6 +31,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import dev.chardoncs.ezmpv.BuildConfig
 import dev.chardoncs.ezmpv.R
 
 private const val LICENSE_URL = "https://github.com/chardoncs/ezmpv/blob/main/LICENSE"
@@ -104,7 +105,7 @@ fun AboutScreen(
                 style = MaterialTheme.typography.headlineMedium,
             )
             Text(
-                text = stringResource(R.string.about_version, versionName),
+                text = stringResource(R.string.about_version, versionName, BuildConfig.CODENAME),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
