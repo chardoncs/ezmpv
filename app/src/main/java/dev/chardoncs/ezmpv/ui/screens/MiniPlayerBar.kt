@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chardoncs.ezmpv.player.PlayerController
 import dev.chardoncs.ezmpv.player.VideoSurfaceHost
 import dev.chardoncs.ezmpv.player.VideoTarget
+import dev.chardoncs.ezmpv.ui.components.RollingText
 
 private const val MINI_PLAYER_EXPAND_THRESHOLD_DP = 64
 
@@ -165,11 +166,9 @@ fun Modifier.MiniPlayerBar(
                         .weight(1f)
                         .padding(horizontal = 12.dp),
                 ) {
-                    Text(
+                    RollingText(
                         text = track.title,
                         style = MaterialTheme.typography.bodyLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         text = track.artist ?: "Unknown artist",

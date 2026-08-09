@@ -90,6 +90,7 @@ import dev.chardoncs.ezmpv.player.playlistVisible
 import dev.chardoncs.ezmpv.playlists.Playlist
 import dev.chardoncs.ezmpv.playlists.PlaylistController
 import dev.chardoncs.ezmpv.ui.components.AddToPlaylistDialog
+import dev.chardoncs.ezmpv.ui.components.RollingText
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val LANDSCAPE_OVERLAY_TIMEOUT_MS = 4000L
@@ -353,12 +354,10 @@ private fun LandscapeNowPlayingScreen(
                                 ) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                 }
-                                Text(
+                                RollingText(
                                     text = currentTrack?.title ?: "Now Playing",
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.onSurface,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f),
                                 )
                                 TrackHeaderActions(
@@ -601,12 +600,10 @@ private fun Modifier.NowPlayingControls(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
+                RollingText(
                     text = track?.title ?: "No track selected",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 TrackHeaderActions(
