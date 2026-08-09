@@ -52,6 +52,8 @@ class PlayerController(
         onTrackEnd = { advanceOnTrackEnd() }
     }
 
+    val videoHost = VideoSurfaceHost(player)
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val _state = MutableStateFlow(PlayerState())
@@ -486,6 +488,11 @@ class PlayerController(
     }
 
     fun setVideoDecodeEnabled(enabled: Boolean) = player.setVideoDecodeEnabled(enabled)
+
+    fun setInPip(inPip: Boolean) {
+        _state.update { it.copy(inPip = inPip) }
+        if (inPip) player.setVideoDecodeEnabled(true)
+    }
 
     fun stopPlayback() {
         restoreJob?.cancel()

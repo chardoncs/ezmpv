@@ -18,6 +18,7 @@ data class PlayerState(
     val error: String? = null,
     val playlistUserOverride: Boolean? = null,
     val playSequence: PlaySequence = PlaySequence.SEQUENCE,
+    val inPip: Boolean = false,
 )
 
 val PlayerState.playlistVisible: Boolean

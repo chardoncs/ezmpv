@@ -24,6 +24,17 @@ class Player(private val context: Context) {
     private var videoSurface: Surface? = null
     private var voAttached = false
     private var videoDecodeEnabled = true
+    private var pendingVideoWidth = 0
+    private var pendingVideoHeight = 0
+    @Volatile
+    var videoWidth: Int = 0
+        private set
+    @Volatile
+    var videoHeight: Int = 0
+        private set
+    @Volatile
+    var videoAspectRatio: Float = 16f / 9f
+        private set
 
     private var mpv: MPVLib? = null
     private var pendingResumeMs: Long? = null
@@ -31,8 +42,13 @@ class Player(private val context: Context) {
     private val observer = object : MPVLib.EventObserver {
         override fun eventProperty(property: String) {}
         override fun eventProperty(property: String, value: Long) {
-            if (property == "time-pos") {
-                _state.update { it.copy(positionMs = value * 1000) }
+            when (property) {
+                "time-pos" -> _state.update { it.copy(positionMs = value * 1000) }
+                "width" -> pendingVideoWidth = value.toInt()
+                "height" -> {
+                    pendingVideoHeight = value.toInt()
+                    publishAspectRatio()
+                }
             }
         }
         override fun eventProperty(property: String, value: Boolean) {
@@ -105,6 +121,8 @@ class Player(private val context: Context) {
             m.observeProperty("duration", MPVLib.MpvFormat.MPV_FORMAT_DOUBLE)
             m.observeProperty("pause", MPVLib.MpvFormat.MPV_FORMAT_FLAG)
             m.observeProperty("eof-reached", MPVLib.MpvFormat.MPV_FORMAT_FLAG)
+            m.observeProperty("width", MPVLib.MpvFormat.MPV_FORMAT_INT64)
+            m.observeProperty("height", MPVLib.MpvFormat.MPV_FORMAT_INT64)
             mpv = m
             Log.i(TAG, "player started")
             ensureVideoOutput()
@@ -140,6 +158,10 @@ class Player(private val context: Context) {
         awaitingFileLoaded = true
         pendingResumeMs = resumePositionMs?.takeIf { it > 0 }
         pendingAutoplay = autoplay
+        pendingVideoWidth = 0
+        pendingVideoHeight = 0
+        videoWidth = 0
+        videoHeight = 0
         _state.update { it.copy(currentIndex = index, positionMs = 0, durationMs = 0, isPlaying = false) }
         m.setPropertyBoolean("pause", true)
         m.command(arrayOf("loadfile", path, "replace"))
@@ -232,6 +254,16 @@ class Player(private val context: Context) {
         m.setPropertyString("vid", if (videoDecodeEnabled) "auto" else "no")
         m.setPropertyString("force-window", "yes")
         voAttached = true
+    }
+
+    private fun publishAspectRatio() {
+        val w = pendingVideoWidth
+        val h = pendingVideoHeight
+        if (w > 0 && h > 0) {
+            videoWidth = w
+            videoHeight = h
+            videoAspectRatio = w.toFloat() / h.toFloat()
+        }
     }
 
     private fun handleEndFile() {

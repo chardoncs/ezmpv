@@ -52,8 +52,8 @@ import androidx.navigation.compose.rememberNavController
 import dev.chardoncs.ezmpv.EzmpvApplication
 import dev.chardoncs.ezmpv.player.PersistentMpvSurface
 import dev.chardoncs.ezmpv.player.VideoTarget
+import dev.chardoncs.ezmpv.player.MpvSurface
 import dev.chardoncs.ezmpv.player.playlistVisible
-import dev.chardoncs.ezmpv.player.rememberVideoSurfaceHost
 import dev.chardoncs.ezmpv.ui.screens.AboutScreen
 import dev.chardoncs.ezmpv.ui.screens.BrowseScreen
 import dev.chardoncs.ezmpv.ui.screens.FileBrowserScreen
@@ -77,7 +77,7 @@ fun EzmpvApp() {
     val controller = remember {
         (context.applicationContext as EzmpvApplication).playerController
     }
-    val videoHost = rememberVideoSurfaceHost(controller.player)
+    val videoHost = controller.videoHost
     val state by controller.state.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -90,7 +90,10 @@ fun EzmpvApp() {
     LaunchedEffect(hasTrack) {
         if (!hasTrack) playerOpen = false
     }
-    val videoTarget = if (state.hasVideo && !state.audioOnly) {
+    val inPip = state.inPip
+    val videoTarget = if (inPip && state.hasVideo && !state.audioOnly) {
+        VideoTarget.PIP
+    } else if (state.hasVideo && !state.audioOnly) {
         when {
             !playerOpen -> VideoTarget.MINI
             !isLandscape && state.playlistVisible -> VideoTarget.HEADER
@@ -167,7 +170,7 @@ fun EzmpvApp() {
                         playerOpen = playerOpen,
                         modifier = Modifier.weight(1f),
                     )
-                    if (hasTrack) {
+                    if (hasTrack && !inPip) {
                         AnimatedVisibility(
                             visible = !playerOpen,
                             enter = fadeIn(tween(200)),
@@ -197,7 +200,7 @@ fun EzmpvApp() {
                 )
             }
 
-            if (hasTrack) {
+            if (hasTrack && !inPip) {
                 AnimatedVisibility(
                     visible = playerOpen,
                     modifier = Modifier
@@ -249,6 +252,13 @@ fun EzmpvApp() {
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+            }
+            if (inPip) {
+                MpvSurface(
+                    host = videoHost,
+                    target = VideoTarget.PIP,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             PersistentMpvSurface(
                 host = videoHost,

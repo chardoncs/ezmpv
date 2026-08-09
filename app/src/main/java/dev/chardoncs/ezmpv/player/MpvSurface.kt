@@ -26,6 +26,7 @@ enum class VideoTarget {
     MINI,
     FULL,
     HEADER,
+    PIP,
 }
 
 @Stable

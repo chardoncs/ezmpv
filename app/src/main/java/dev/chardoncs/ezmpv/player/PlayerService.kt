@@ -92,6 +92,15 @@ class PlayerService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         mediaSession
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_PREV -> (application as EzmpvApplication).playerController.previous()
+            ACTION_PLAY_PAUSE -> (application as EzmpvApplication).playerController.togglePlayPause()
+            ACTION_NEXT -> (application as EzmpvApplication).playerController.next()
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         (application as EzmpvApplication).playerController.stopPlayback()
         stopForeground(STOP_FOREGROUND_REMOVE)
@@ -113,5 +122,8 @@ class PlayerService : MediaSessionService() {
     companion object {
         private const val CHANNEL_ID = "ezmpv_playback"
         private const val NOTIFICATION_ID = 1
+        const val ACTION_PREV = "dev.chardoncs.ezmpv.action.PREV"
+        const val ACTION_PLAY_PAUSE = "dev.chardoncs.ezmpv.action.PLAY_PAUSE"
+        const val ACTION_NEXT = "dev.chardoncs.ezmpv.action.NEXT"
     }
 }
