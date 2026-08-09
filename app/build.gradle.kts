@@ -17,10 +17,10 @@ android {
         minSdk = 29
         //noinspection OldTargetApi
         targetSdk = 36
-        val baseVersionCode = 2
+        val baseVersionCode = 3
         val abiSuffix = (project.findProperty("abiVercodeSuffix") as String?)?.toInt() ?: 0
         versionCode = if (abiSuffix == 0) baseVersionCode else baseVersionCode * 10 + abiSuffix
-        versionName = "0.1.1"
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
